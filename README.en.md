@@ -23,6 +23,7 @@ The repository contains nothing from Nintendo: no logos, fonts, images or sounds
   - **SD** opens the TV's media player (USB drives).
   - **Envelope** (right) lists the HDMI inputs and live TV.
 - **Pointing hand** that follows the selected channel or button.
+- **Mii Channel**: the first channel. The plaza with your Miis walking around on the squared floor, the side buttons (edit, new, delete, help, parade, mail), the whistle that lines them up by name, favourite, colour or gender, and the editor to make and change them. Miis are saved on the TV. On its own everything is drawn in code; if you load a pack of your own (`miipack.zip`, see `ThemeProvider`) it uses its faces, hair, icons and sounds. The repository does not include that pack.
 - **Sounds** for moving, opening, turning the page, opening the inputs list and leaving the notice screen. They follow the TV volume.
 - **Notice screen** at power-on. OK or the arrows close it, or it leaves by itself after 12 seconds. It does not come back when you leave an app.
 - **Always starts on the menu**: turning the TV on brings the menu back even if another app was open.

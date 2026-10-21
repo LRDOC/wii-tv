@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
@@ -26,6 +27,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 import java.util.Set;
 
 /** Home screen in the style of the old console menu; all of the drawing is in WiiMenuView. */
@@ -42,6 +44,9 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private boolean appsDirty = true;
     private boolean resumed;
     private String liveTvPkg;
+    private MiiStore miiStore;
+    private int miiVersion = -1;
+    private Typeface miiFace;
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
@@ -89,6 +94,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
             menu.setRefPose(true);
         }
         liveTvPkg = getString(R.string.live_tv_package);
+        miiStore = new MiiStore(this);
 
         IntentFilter screen = new IntentFilter(Intent.ACTION_SCREEN_ON);
         IntentFilter packages = new IntentFilter();
@@ -109,7 +115,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     protected void onResume() {
         super.onResume();
         resumed = true;
-        if (appsDirty) reloadApps();
+        if (appsDirty || miiStore.version() != miiVersion) reloadApps();
         menu.start();
         if (introPending) {
             introPending = false;
@@ -198,7 +204,29 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
             }
             return a.label.compareToIgnoreCase(b.label);
         });
+        int at = 0;
+        while (at < channels.size() && dock.contains(channels.get(at).key)) at++;
+        channels.add(at, miiChannel());
         menu.setChannels(channels);
+    }
+
+    /** The built-in Mii channel, right after the dock apps; its tile shows the plaza's residents. */
+    private WiiMenuView.Channel miiChannel() {
+        if (miiFace == null) {
+            Typeface regular;
+            try {
+                regular = getResources().getFont(R.font.outfit_medium);
+            } catch (RuntimeException e) {
+                regular = Typeface.SANS_SERIF;
+            }
+            miiFace = WiiMenuView.weight(this, regular, 620);
+        }
+        String name = getString(R.string.mii_channel_name);
+        MiiPack.get(this);
+        List<Mii> miis = miiStore.loadOrSeed(new Random(), MiiChannelView.SEED_COUNT);
+        miiVersion = miiStore.version();
+        return new WiiMenuView.Channel(getPackageName() + ".mii", name, new MiiBanner(miis, name, miiFace), null,
+                new Intent(this, MiiChannelActivity.class));
     }
 
     private void open(Intent intent) {

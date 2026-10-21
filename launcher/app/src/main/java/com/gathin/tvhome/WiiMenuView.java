@@ -38,9 +38,14 @@ import java.util.Locale;
  *
  * Geometry is in pixels of a 1920 x 1080 capture of the original ("ref px"), measured off it, and scaled by
  * the view width. The static backdrop and the button bodies are computed per pixel in WiiBase off the UI
- * thread; everything that moves is drawn here. Frames are only drawn while something moves.
+ * thread; everything that moves is drawn here. Frames are only drawn while something moves (a live tile counts).
  */
 public class WiiMenuView extends View {
+
+    /** A tile picture that changes over time; the menu keeps redrawing while one is on screen. */
+    interface LiveArt {
+        boolean animating();
+    }
 
     interface Listener {
         void onChannel(Channel channel);
@@ -78,6 +83,8 @@ public class WiiMenuView extends View {
     }
 
     private static final int SLOTS_PER_PAGE = 12;
+    /** Frame interval while only a live tile moves: smooth enough for its slow loop, light on the TV. */
+    private static final long LIVE_FRAME_MS = 33L;
     private static final int MIN_PAGES = 4;
     static final int BTN_SETTINGS = -1;
     static final int BTN_SD = -2;
@@ -149,6 +156,8 @@ public class WiiMenuView extends View {
     private float pagePos;
     private float[] lift = new float[MIN_PAGES * SLOTS_PER_PAGE + 3];
     private float handX, handY;
+    /** Set while drawing when a live tile is on screen. */
+    private boolean liveShown;
     private boolean handPlaced;
     private long lastFrameNanos;
     private boolean started;
@@ -224,7 +233,7 @@ public class WiiMenuView extends View {
     }
 
     /** The variable font at a real weight; Typeface.create(f, BOLD) would only smear the 500 outlines. */
-    private static Typeface weight(Context context, Typeface fallback, int wght) {
+    static Typeface weight(Context context, Typeface fallback, int wght) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 Font font = new Font.Builder(context.getResources(), R.font.outfit)
@@ -754,10 +763,12 @@ public class WiiMenuView extends View {
         if (introAlpha > 0f) drawIntro(c);
 
         if (moving || introAlpha > 0f) postInvalidateOnAnimation();
+        else if (liveShown) postInvalidateDelayed(LIVE_FRAME_MS);
         else lastFrameNanos = 0;
     }
 
     private void drawTiles(Canvas c) {
+        liveShown = false;
         int total = pages * SLOTS_PER_PAGE;
         for (int sl = 0; sl < total; sl++) {
             if (sl == focus) continue;
@@ -806,8 +817,11 @@ public class WiiMenuView extends View {
     private void ensureArt(Channel ch, int tw, int th) {
         tw = Math.max(1, tw);
         th = Math.max(1, th);
-        if (ch.art != null && ch.art.getWidth() == tw && ch.art.getHeight() == th) return;
-        Bitmap bmp = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
+        boolean live = ch.banner instanceof LiveArt && ((LiveArt) ch.banner).animating();
+        if (live) liveShown = true;
+        boolean sized = ch.art != null && ch.art.getWidth() == tw && ch.art.getHeight() == th;
+        if (sized && !live) return;
+        Bitmap bmp = sized ? ch.art : Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
         Canvas cv = new Canvas(bmp);
         cv.drawColor(0xFFFFFFFF);
         if (ch.banner != null) {
@@ -830,6 +844,7 @@ public class WiiMenuView extends View {
             CharSequence label = TextUtils.ellipsize(ch.label, tp, tw * 0.86f, TextUtils.TruncateAt.END);
             cv.drawText(label, 0, label.length(), tw / 2f, th * 0.86f, tp);
         }
+        if (sized) return;
         ch.art = bmp;
         ch.shader = new BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
     }

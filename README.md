@@ -23,6 +23,7 @@ El repositorio no trae nada de Nintendo: ni logos, ni tipografías, ni imágenes
   - **SD** abre el reproductor multimedia de la TV (pendrive o disco USB).
   - **Sobre** (derecha) abre la lista de entradas HDMI y la TV en vivo.
 - **Manito** que sigue al canal o botón elegido.
+- **Canal Mii**: el primer canal. La plaza con tus Miis paseando sobre el piso de cuadrados, los botones de los costados (editar, crear, borrar, ayuda, desfile, mensajes), el silbato que los ordena por nombre, favoritos, color o género, y el editor para crearlos y cambiarlos. Los Miis se guardan en la TV. Sin nada más, todo se dibuja por código; si cargás un paquete propio (`miipack.zip`, ver `ThemeProvider`) usa sus caras, pelos, íconos y sonidos. El repositorio no trae ese paquete.
 - **Sonidos** al moverte, al abrir algo, al cambiar de página, al abrir las entradas y al continuar desde el aviso. Usan el volumen de la TV.
 - **Pantalla de aviso** al prender la TV. La cierran OK o las flechas, o se va sola a los 12 segundos. No vuelve a aparecer cuando salís de una app.
 - **Siempre arranca en el menú**: al prender la TV vuelve al menú aunque hayas dejado otra app abierta.

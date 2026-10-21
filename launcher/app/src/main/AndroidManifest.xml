@@ -76,6 +76,15 @@
             </intent-filter>
         </activity>
 
+        <!-- The Mii channel, opened from its tile in the channel menu. Same task as the home screen, so
+             Home always lands back on the menu. -->
+        <activity
+            android:name=".MiiChannelActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|uiMode"
+            android:screenOrientation="landscape" />
+
         <activity
             android:name=".LauncherSettingsActivity"
             android:exported="false"
