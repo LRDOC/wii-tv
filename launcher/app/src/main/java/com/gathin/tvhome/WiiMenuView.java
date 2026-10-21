@@ -786,7 +786,15 @@ public class WiiMenuView extends View {
         int save = c.save();
         c.translate(r.left, r.top);
         Channel ch = slot < channels.size() ? channels.get(slot) : null;
-        if (ch != null) {
+        if (ch != null && ch.banner instanceof LiveArt && ((LiveArt) ch.banner).animating()) {
+            // Straight into the frame: a tile bitmap redrawn every frame flickers on the TV, as the render thread
+            // can still be reading it while the next frame paints it over.
+            liveShown = true;
+            int clip = c.save();
+            c.clipPath(tilePath);
+            drawCropped(c, ch.banner, Math.round(r.width()), Math.round(r.height()));
+            c.restoreToCount(clip);
+        } else if (ch != null) {
             ensureArt(ch, Math.round(r.width()), Math.round(r.height()));
             artPaint.setShader(ch.shader);
             c.drawPath(tilePath, artPaint);
@@ -817,11 +825,8 @@ public class WiiMenuView extends View {
     private void ensureArt(Channel ch, int tw, int th) {
         tw = Math.max(1, tw);
         th = Math.max(1, th);
-        boolean live = ch.banner instanceof LiveArt && ((LiveArt) ch.banner).animating();
-        if (live) liveShown = true;
-        boolean sized = ch.art != null && ch.art.getWidth() == tw && ch.art.getHeight() == th;
-        if (sized && !live) return;
-        Bitmap bmp = sized ? ch.art : Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
+        if (ch.art != null && ch.art.getWidth() == tw && ch.art.getHeight() == th) return;
+        Bitmap bmp = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
         Canvas cv = new Canvas(bmp);
         cv.drawColor(0xFFFFFFFF);
         if (ch.banner != null) {
@@ -844,7 +849,6 @@ public class WiiMenuView extends View {
             CharSequence label = TextUtils.ellipsize(ch.label, tp, tw * 0.86f, TextUtils.TruncateAt.END);
             cv.drawText(label, 0, label.length(), tw / 2f, th * 0.86f, tp);
         }
-        if (sized) return;
         ch.art = bmp;
         ch.shader = new BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
     }
