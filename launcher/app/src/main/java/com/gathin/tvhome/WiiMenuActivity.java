@@ -47,6 +47,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private MiiStore miiStore;
     private int miiVersion = -1;
     private Typeface miiFace;
+    private GamesBanner gamesBanner;
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
@@ -179,6 +180,9 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
         List<ResolveInfo> found = pm.queryIntentActivities(query, 0);
         Set<String> hidden = new HashSet<>(Arrays.asList(getResources().getStringArray(R.array.hidden_apps)));
+        boolean games = getResources().getBoolean(R.bool.games_channel);
+        // RetroArch's own menu is a button in the Games channel, so its tile would only be a second way in.
+        if (games) hidden.addAll(Arrays.asList(RetroArch.PACKAGES));
         final List<String> dock = Arrays.asList(getResources().getStringArray(R.array.dock_apps));
         Set<String> seen = new HashSet<>();
         List<WiiMenuView.Channel> channels = new ArrayList<>();
@@ -207,7 +211,16 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         int at = 0;
         while (at < channels.size() && dock.contains(channels.get(at).key)) at++;
         channels.add(at, miiChannel());
+        if (games) channels.add(at + 1, gamesChannel());
         menu.setChannels(channels);
+    }
+
+    /** The built-in Games channel, after the Mii channel; its tile is a pixel meadow with a runner. */
+    private WiiMenuView.Channel gamesChannel() {
+        String name = getString(R.string.games_channel_name);
+        if (gamesBanner == null) gamesBanner = new GamesBanner(name, miiFace);
+        return new WiiMenuView.Channel(getPackageName() + ".games", name, gamesBanner, null,
+                new Intent(this, GamesActivity.class));
     }
 
     /** The built-in Mii channel, right after the dock apps; its tile shows the plaza's residents. */

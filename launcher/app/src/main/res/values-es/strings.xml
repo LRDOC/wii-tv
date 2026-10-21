@@ -109,4 +109,12 @@
     <string name="mii_keep_editing">Seguir editando</string>
     <string name="mii_kb_shift">Mayús</string>
     <string name="mii_kb_space">Espacio</string>
-    <string name="mii_kb_delete">Borrar</string></resources>
+    <string name="mii_kb_delete">Borrar</string>
+    <string name="games_channel_name">Juegos</string>
+    <string name="games_play">Jugar</string>
+    <string name="games_empty_title">Todavía no hay juegos</string>
+    <string name="games_empty_body">Añádelos desde el ordenador con tools/games/add.py.</string>
+    <string name="games_missing">Instala RetroArch para jugar.</string>
+    <string name="games_key_a">OK: A</string>
+    <string name="games_key_b">Atrás: B</string>
+    <string name="games_key_menu">Mantén el rojo: menú de RetroArch</string></resources>

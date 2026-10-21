@@ -11,4 +11,7 @@
     <string name="mii_help_body">Señalá un Mii y presioná OK para elegirlo; presioná OK otra vez para levantarlo y llevarlo. Soltalo en el botón de borrar para borrarlo, o en el de editar para cambiarlo. El silbato de abajo a la derecha los pone en fila y el botón de arriba a la derecha arranca un desfile.</string>
     <string name="mii_new_gender">Elegí el sexo.</string>
     <string name="mii_new_how">¿Cómo querés empezar?</string>
-    <string name="mii_lookalike_title">Elegí un parecido</string></resources>
+    <string name="mii_lookalike_title">Elegí un parecido</string>
+    <string name="games_empty_body">Agregalos desde la computadora con tools/games/add.py.</string>
+    <string name="games_missing">Instalá RetroArch para jugar.</string>
+    <string name="games_key_menu">Mantené el rojo: menú de RetroArch</string></resources>

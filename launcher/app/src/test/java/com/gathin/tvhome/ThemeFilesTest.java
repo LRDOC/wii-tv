@@ -16,6 +16,7 @@ public class ThemeFilesTest {
         assertEquals("wallpaper.jpg", ThemeFiles.path(Collections.singletonList("wallpaper.jpg")));
         assertEquals("theme_revision", ThemeFiles.path(Collections.singletonList("theme_revision")));
         assertEquals("miipack.zip", ThemeFiles.path(Collections.singletonList("miipack.zip")));
+        assertEquals("games.txt", ThemeFiles.path(Collections.singletonList("games.txt")));
     }
 
     @Test public void collectionImagesAreAllowed() {

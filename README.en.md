@@ -24,7 +24,7 @@ The repository contains nothing from Nintendo: no logos, fonts, images or sounds
   - **Envelope** (right) lists the HDMI inputs and live TV.
 - **Pointing hand** that follows the selected channel or button.
 - **Mii Channel**: the first channel. The plaza with your Miis walking around on the squared floor, the side buttons (edit, new, delete, help, parade, mail), the whistle that lines them up by name, favourite, colour or gender, and the editor to make and change them. Miis are saved on the TV. On its own everything is drawn in code; with the channel pack it uses the original faces, hair, icons and sounds. The repository does not include those files: [`tools/miipack`](tools/miipack/README.md) (in Spanish) fetches them from their public pages and builds the pack on your computer.
-- **Sounds** for moving, opening, turning the page, opening the inputs list and leaving the notice screen. They follow the TV volume.
+- **Games channel**: next to the Mii Channel. Its tile is a pixel-art meadow with a little blue runner hopping over rocks for gems. Inside, your games are cartridges on a shelf: pick one, press **Play** and it starts in [RetroArch](https://www.retroarch.com) with mGBA (Game Boy, Game Boy Color and Game Boy Advance). The **RetroArch** button opens its settings. The repository ships no games; see [Games](#games).- **Sounds** for moving, opening, turning the page, opening the inputs list and leaving the notice screen. They follow the TV volume.
 - **Notice screen** at power-on. OK or the arrows close it, or it leaves by itself after 12 seconds. It does not come back when you leave an app.
 - **Always starts on the menu**: turning the TV on brings the menu back even if another app was open.
 - Clock screensaver (optional).
@@ -66,6 +66,15 @@ Run every command from the repository folder, and replace `192.168.1.50` with yo
 | Back | Closes the inputs list or the notice screen. |
 | Home | Back to the menu. |
 
+## Games
+
+The Games channel starts your games in RetroArch. Only use games you own: dump your own cartridges with a cartridge reader (GB Operator or GBxCart RW, for example).
+
+1. **Install RetroArch on the TV.** Most Android TVs are 32-bit and need `RetroArch_ra32.apk` from the [RetroArch downloads page](https://www.retroarch.com/?page=platforms). Open it once and get the core: Online Updater → Core Downloader → Nintendo - Game Boy Advance (mGBA). Leave with Home.
+2. **Set it up for the TV remote** (once): `TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py --setup`. It adds the button maps in `tools/games/retroarch/` and changes a few RetroArch settings: OK chooses and Back goes back, holding red opens its menu, and games save every 10 seconds. The previous settings are kept in `retroarch.cfg.before-wii-tv` in RetroArch's folder on the TV. For a Bluetooth gamepad, also run Online Updater → Update Controller Profiles in RetroArch.
+3. **Add your games** (`.gba`, `.gb` or `.gbc`): `TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py "My game.gba" --title "My game"`. It copies the file to `RetroArch/roms/` on the TV and puts it on the shelf. `--color "#E8432E"` sets the label colour, `--list` shows the games, and `--remove "My game"` takes one off (`--delete` also deletes its file from the TV).
+
+In a game, the TV remote's arrows are the D-pad, OK is A, Back is B, and red, green, yellow and blue are Start, Select, L and R. Hold red for two seconds for RetroArch's menu (save, load or close the game). Home goes back to the Wii Menu with the game paused; choose it again to carry on. Choosing another game, or the channel's RetroArch button, closes the open one, and in-game saves reach the file within 10 seconds, so wait a moment before switching. The button map is for Philips TV remotes ("MStar Smart TV IR Receiver"); for another remote, map it in RetroArch → Settings → Input.
 ## Customise
 
 Change what you like and run `launcher/build-and-install.sh` again.
@@ -81,6 +90,7 @@ Change what you like and run `launcher/build-and-install.sh` again.
 | How the sounds sound | `tools/sounds/make_sounds.py`; edit it and run `python3 tools/sounds/make_sounds.py` (needs numpy) |
 | Colours, sizes, positions | Constants at the top of `WiiMenuView.java`; backdrop and panels in `WiiBase.java` and `WiiPalette.java` |
 | App behind the SD button | `MEDIA_PLAYER` in `WiiMenuActivity.java` |
+| Games channel on or off | `games_channel` in `config.xml`; with the channel, RetroArch gets no channel of its own |
 
 ## Undo
 
