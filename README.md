@@ -6,6 +6,8 @@ El menú de canales de la Wii como pantalla de inicio de tu Android TV.
 
 wii-tv cambia la pantalla de inicio de un Android TV por un menú al estilo del Menú Wii: doce canales por página, el reloj de segmentos, la fecha, los botones redondos, la manito que sigue a lo que elegís y sonidos al moverte. Cada canal es una de tus apps, con su propio banner. Al prender la TV aparece una pantalla de aviso blanca, como en la consola, y con OK pasás al menú.
 
+Lo mostré en X: [Le puse la interfaz de la Wii a mi TV](https://x.com/ProtoMauro/status/2112776289312555195).
+
 English: [README.en.md](README.en.md)
 
 ## Aviso
