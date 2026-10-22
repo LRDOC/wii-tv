@@ -24,7 +24,9 @@ The repository contains nothing from Nintendo: no logos, fonts, images or sounds
   - **Envelope** (right) lists the HDMI inputs and live TV.
 - **Pointing hand** that follows the selected channel or button.
 - **Mii Channel**: the first channel. The plaza with your Miis walking around on the squared floor, the side buttons (edit, new, delete, help, parade, mail), the whistle that lines them up by name, favourite, colour or gender, and the editor to make and change them. Miis are saved on the TV. On its own everything is drawn in code; with the channel pack it uses the original faces, hair, icons and sounds. The repository does not include those files: [`tools/miipack`](tools/miipack/README.md) (in Spanish) fetches them from their public pages and builds the pack on your computer.
-- **Games channel**: next to the Mii Channel. Its tile is a pixel-art meadow with a little blue runner hopping over rocks for gems. Inside, your games are cartridges on a shelf: pick one, press **Play** and it starts in [RetroArch](https://www.retroarch.com) with mGBA (Game Boy, Game Boy Color and Game Boy Advance). The **RetroArch** button opens its settings. The repository ships no games; see [Games](#games).- **Sounds** for moving, opening, turning the page, opening the inputs list and leaving the notice screen. They follow the TV volume.
+- **Games channel**: next to the Mii Channel. Its tile is a pixel-art meadow with a little blue runner hopping over rocks for gems. Inside, your games are cartridges on a shelf: pick one, press **Play** and it starts in [RetroArch](https://www.retroarch.com) with mGBA (Game Boy, Game Boy Color and Game Boy Advance). The **RetroArch** button opens its settings. The repository ships no games; see [Games](#games).
+- **Sounds** for moving, opening, turning the page, opening the inputs list and leaving the notice screen. They follow the TV volume.
+- **Menu music** (optional): the start jingle and a looping tune, as on the console, from your own files; see [Menu music](#menu-music).
 - **Notice screen** at power-on. OK or the arrows close it, or it leaves by itself after 12 seconds. It does not come back when you leave an app.
 - **Always starts on the menu**: turning the TV on brings the menu back even if another app was open.
 - Clock screensaver (optional).
@@ -75,6 +77,19 @@ The Games channel starts your games in RetroArch. Only use games you own: dump y
 3. **Add your games** (`.gba`, `.gb` or `.gbc`): `TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py "My game.gba" --title "My game"`. It copies the file to `RetroArch/roms/` on the TV and puts it on the shelf. `--color "#E8432E"` sets the label colour, `--list` shows the games, and `--remove "My game"` takes one off (`--delete` also deletes its file from the TV).
 
 In a game, the TV remote's arrows are the D-pad, OK is A, Back is B, and red, green, yellow and blue are Start, Select, L and R. Hold red for two seconds for RetroArch's menu (save, load or close the game). Home goes back to the Wii Menu with the game paused; choose it again to carry on. Choosing another game, or the channel's RetroArch button, closes the open one, and in-game saves reach the file within 10 seconds, so wait a moment before switching. The button map is for Philips TV remotes ("MStar Smart TV IR Receiver"); for another remote, map it in RetroArch → Settings → Input.
+
+## Menu music
+
+The Wii Menu can have background music, as on the console: when you close the notice screen, the start jingle plays with the music, and then the music loops. It plays only on the menu: it fades out when you open a channel, an app, Settings or the screensaver, and starts over when you come back. If another app is playing sound (music left on in the background, say), the menu waits until it stops.
+
+The app ships with no music. Add your own with `tools/music/add.py`, which needs [ffmpeg](https://ffmpeg.org) on your computer:
+
+```sh
+TV_HOST=192.168.1.50 tools/venv/bin/python tools/music/add.py music.flac --start jingle.flac --loop 12.5 48
+```
+
+`--loop START END` is in seconds: the music plays to END and carries on from START, over and over. The second and a half before END fades into what plays just before START, so the jump is not heard (`--crossfade` sets how long). Without `--loop` the whole file repeats. `--start` is optional: a jingle mixed over the start of the music, which then takes the place of the menu's own start sound. It reads what ffmpeg reads (mp3, flac, ogg, m4a, wav) and stores it on the TV as WAV, in wiiOS's folder; with `adb` installed (or `ADB=/path/to/adb`) the copy takes a second. `--remove` takes the music off, and `--out folder` only writes the files.
+
 ## Customise
 
 Change what you like and run `launcher/build-and-install.sh` again.
@@ -85,6 +100,8 @@ Change what you like and run `launcher/build-and-install.sh` again.
 | Apps that never get a channel | `hidden_apps`, same file |
 | Left button text | `wii_settings_label` (default `wiiOS`) |
 | Sounds on or off | `wii_sounds` |
+| Menu music on or off | `wii_music` |
+| Music volume | `wii_music_volume`, in percent of the file's own level (default 100) |
 | Live TV app in the inputs list | `live_tv_package` |
 | Notice screen text | `wii_intro_title`, `wii_intro_body`, `wii_intro_continue` in `res/values*/strings.xml` |
 | How the sounds sound | `tools/sounds/make_sounds.py`; edit it and run `python3 tools/sounds/make_sounds.py` (needs numpy) |

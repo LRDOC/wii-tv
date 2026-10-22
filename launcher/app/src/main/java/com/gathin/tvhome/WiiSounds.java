@@ -3,6 +3,7 @@ package com.gathin.tvhome;
 import android.content.Context;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
+import android.os.SystemClock;
 
 /**
  * The channel menu's interface sounds (res/raw/wii_*.wav, synthesised by tools/sounds/make_sounds.py).
@@ -21,6 +22,8 @@ final class WiiSounds {
     private final SoundPool pool;
     private final int[] ids = new int[6];
     private final boolean enabled;
+    private final boolean[] muted = new boolean[6];
+    private volatile long lastPlayed;
 
     WiiSounds(Context context, boolean enabled) {
         this.enabled = enabled;
@@ -39,7 +42,19 @@ final class WiiSounds {
     }
 
     void play(int which) {
-        if (enabled && ids[which] != 0) pool.play(ids[which], VOLUME, VOLUME, 1, 0, 1f);
+        if (!enabled || ids[which] == 0 || muted[which]) return;
+        pool.play(ids[which], VOLUME, VOLUME, 1, 0, 1f);
+        lastPlayed = SystemClock.uptimeMillis();
+    }
+
+    /** Leaves one sound out, e.g. the start sound while the menu music brings its own. */
+    void mute(int which, boolean on) {
+        muted[which] = on;
+    }
+
+    /** When the last sound started, in uptime milliseconds; 0 before the first. */
+    long lastPlayedMs() {
+        return lastPlayed;
     }
 
     void release() {

@@ -52,6 +52,8 @@ public class WiiMenuView extends View {
         void onSettingsButton();
         void onSdButton();
         void onInputsButton();
+        /** The welcome screen started to leave: the menu is coming up, as after power-on. */
+        void onIntroDismissed();
     }
 
     static final class Channel {
@@ -323,6 +325,12 @@ public class WiiMenuView extends View {
         introLeaving = true;
         removeCallbacks(autoContinue);
         invalidate();
+        listener.onIntroDismissed();
+    }
+
+    /** True while the welcome screen is up and not yet leaving. */
+    boolean introShowing() {
+        return introAlpha > 0f && !introLeaving;
     }
 
     void showMenu(String title, List<MenuItem> items) {
