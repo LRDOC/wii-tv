@@ -415,6 +415,22 @@ public class WiiMenuView extends View {
         return false;
     }
 
+    /** Home pressed with the menu already on screen: closes the list, or else goes back to the first channel. */
+    void home() {
+        if (menuOpen) {
+            closeMenu();
+            return;
+        }
+        if (refPose || introAlpha > 0f) return;
+        int before = focus, pageBefore = page;
+        page = 0;
+        focus = 0;
+        if (focus != before || page != pageBefore) {
+            sound(page != pageBefore ? WiiSounds.PAGE : WiiSounds.MOVE);
+            invalidate();
+        }
+    }
+
     void setSounds(WiiSounds sounds) {
         this.sounds = sounds;
     }

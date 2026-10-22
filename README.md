@@ -127,7 +127,7 @@ Mientras la depuración esté activada, cualquier computadora que ya autorizaste
 | CH+ / CH- | Pasan de página (también avance y retroceso rápido). |
 | OK | Abre el canal o el botón elegido. |
 | Atrás | Cierra la lista de entradas o la pantalla de aviso. |
-| Home | Vuelve al menú. |
+| Home | Vuelve al menú. Si ya estás en el menú, vuelve a la primera página. |
 
 ## Juegos
 

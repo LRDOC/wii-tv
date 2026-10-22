@@ -159,8 +159,12 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        menu.closeMenu();
-        if (intent.getBooleanExtra(EXTRA_REF_POSE, false)) {
+        boolean refPose = intent.getBooleanExtra(EXTRA_REF_POSE, false);
+        // Window focus, not onStart/onStop: coming back from an app, Android starts the menu again before it
+        // hands over the Home intent, and gives the window its focus only after.
+        if (menu.hasWindowFocus() && !refPose) menu.home();
+        else menu.closeMenu();
+        if (refPose) {
             introPending = false;
             menu.setRefPose(true);
         }
