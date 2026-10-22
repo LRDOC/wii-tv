@@ -1,5 +1,6 @@
 package com.gathin.tvhome;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -11,6 +12,7 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -39,6 +41,8 @@ import java.util.Locale;
  * Geometry is in pixels of a 1920 x 1080 capture of the original ("ref px"), measured off it, and scaled by
  * the view width. The static backdrop and the button bodies are computed per pixel in WiiBase off the UI
  * thread; everything that moves is drawn here. Frames are only drawn while something moves (a live tile counts).
+ * On Android 10 and later what holds still is kept in a GPU layer that is re-rendered only when part of it
+ * changes; each frame draws that layer and, over it, only what moves.
  */
 public class WiiMenuView extends View {
 
@@ -92,6 +96,13 @@ public class WiiMenuView extends View {
     static final int BTN_SD = -2;
     static final int BTN_INPUTS = -3;
     private static final long INTRO_AUTO_MS = 12_000L;
+    /** How often the clock reads the time; it shows minutes, so this only bounds how late a new minute appears. */
+    private static final long CLOCK_CHECK_MS = 250L;
+
+    // What a frame draws, in drawing order.
+    private static final int IT_BASE = 0, IT_TILE = 1, IT_ARROW_R = 2, IT_ARROW_L = 3, IT_BTN_L = 4, IT_BTN_R = 5,
+            IT_SD = 6, IT_DIGITS = 7, IT_COLON = 8, IT_AMPM = 9, IT_DATE = 10, IT_HAND = 11, IT_MENU = 12,
+            IT_INTRO = 13;
 
     // Channel frames: the box through the corner arcs' ends; the sides bow out by TILE_BULGE in the middle.
     private static final float TILE_X0 = 163f;
@@ -147,6 +158,8 @@ public class WiiMenuView extends View {
     private static final int BLUE = 0xFF3FC0EC;
     /** Segment bits a-g per digit; the original's 7 keeps the upper-left bar. */
     private static final int[] SEGMENTS = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x27, 0x7F, 0x6F};
+    /** The segment bits in the order digitSegs holds and draws them: a, d, f, b, e, c, g. */
+    private static final int[] SEGMENT_ORDER = {0x01, 0x08, 0x20, 0x02, 0x10, 0x04, 0x40};
     /** The previous version's hand was drawn in units of 1/1024 of the width. */
     private static final float HAND_UNIT = 1920f / 1024f;
 
@@ -158,9 +171,10 @@ public class WiiMenuView extends View {
     private float pagePos;
     private float[] lift = new float[MIN_PAGES * SLOTS_PER_PAGE + 3];
     private float handX, handY;
-    /** Set while drawing when a live tile is on screen. */
+    /** Set each frame when a live tile is on screen. */
     private boolean liveShown;
     private boolean handPlaced;
+    private boolean handMoving;
     private long lastFrameNanos;
     private boolean started;
     private boolean colonOn = true;
@@ -190,21 +204,51 @@ public class WiiMenuView extends View {
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint artPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint bmpPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    /** Paints the backdrop back around a live tile; aliased, which the GPU fills without building a mask. */
+    private final Paint under = new Paint();
     private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
     private final RectF tmp = new RectF();
     private final Matrix matrix = new Matrix();
-    private final Path path = new Path();
     private final float[] point = new float[2];
+    private final android.graphics.Rect inkBounds = new android.graphics.Rect();
     private final Typeface face;
     private final Typeface faceBold;
     private final Typeface sansBold = Typeface.create("sans-serif", Typeface.BOLD);
+    private final Typeface sdFace = Typeface.create(sansBold, Typeface.BOLD_ITALIC);
 
     private volatile int buildGen;
     private Bitmap base, btnLeft, btnRight, emptyArt;
-    private BitmapShader emptyShader;
-    private Path tilePath, arrowPath, handPath, handLines, sdPath;
-    private CornerPathEffect arrowCorners, digitCorners;
+    private BitmapShader emptyShader, baseShader, underShader;
+    private Path tilePath, handPath, handLines;
+    /** Everything outside a channel frame, for trimming a live tile to the frame. */
+    private Path tileOutside;
+    /** Outlines with their corners already rounded: the shapes a CornerPathEffect gives, worked out once. */
+    private Path arrowRound, sdRound, warnRound;
+    /** Per clock position, its seven segments in SEGMENT_ORDER. */
+    private Path[][] digitSegs;
+    private LinearGradient arrowBody, arrowShine;
+    private LinearGradient[] menuShaders;
+
+    private int clockHour = 12, clockMinute;
+    private boolean clockPm, clockStale = true;
+    private long clockAtMs;
+    private String dateText = "", dateDay = "", dateRest = "";
+    private float dateRestW, dateTotal, dateScale;
+    private int dateKey = Integer.MIN_VALUE;
+    private Locale dateLocale;
+
+    // This frame's parts in drawing order, with screen bounds and whether each is drawn straight into the frame.
+    private int itemCount;
+    private int[] itemKind = new int[0], itemArg = new int[0];
+    private boolean[] itemDirect = new boolean[0], itemLive = new boolean[0];
+    private float[] itemBox = new float[0];
+    /** What the still layer holds, to tell when it must be recorded again. */
+    private int[] sig = new int[0], lastSig = new int[0];
+    private int lastSigLen = -1;
+    /** Bumped when something the still layer draws changes in a way the signature cannot see. */
+    private int stillGen;
+    private Still still;
 
     private final Runnable blink = new Runnable() {
         @Override
@@ -263,6 +307,7 @@ public class WiiMenuView extends View {
             page = 0;
             pagePos = 0f;
         }
+        stillGen++;
         invalidate();
     }
 
@@ -288,6 +333,8 @@ public class WiiMenuView extends View {
             introLeaving = false;
             handPlaced = false;
         }
+        stillGen++;
+        clockStale = true;
         invalidate();
     }
 
@@ -339,6 +386,7 @@ public class WiiMenuView extends View {
         menuItems = new ArrayList<>(items);
         menuFocus = 0;
         menuLift = new float[menuItems.size()];
+        menuShaders = null;
         menuOpen = true;
         invalidate();
     }
@@ -391,6 +439,7 @@ public class WiiMenuView extends View {
             if (!isOk(keyCode) && !isDpad(keyCode)) return false;
             refPose = false;
             focus = 0;
+            clockStale = true;
             removeCallbacks(blink);
             postDelayed(blink, 1000);
             invalidate();
@@ -544,11 +593,21 @@ public class WiiMenuView extends View {
         h = Math.max(1, nh);
         s = w / 1920f;
         tilePath = buildTilePath(TILE_W * s, TILE_H * s, TILE_R * s, TILE_BULGE * s);
-        arrowPath = buildArrow();
-        arrowCorners = new CornerPathEffect(7f * s);
-        digitCorners = new CornerPathEffect(2.5f * s);
+        tileOutside = new Path(tilePath);
+        tileOutside.setFillType(Path.FillType.INVERSE_WINDING);
+        arrowRound = rounded(buildArrow(), new CornerPathEffect(7f * s));
+        arrowBody = new LinearGradient(0f, (ARROW_T - ARROW_Y) * s, 0f, (ARROW_B - ARROW_Y) * s,
+                new int[] {0xFF6FCDF3, 0xFFA9E6FB, 0xFFDDF8FF, 0xFF9FE0F8, 0xFF62C5F0},
+                new float[] {0f, 0.35f, 0.5f, 0.62f, 1f}, Shader.TileMode.CLAMP);
+        arrowShine = new LinearGradient((ARROW_L - ARROW_TIP) * s, 0f, 0f, 0f, 0x66FFFFFF, 0x00FFFFFF,
+                Shader.TileMode.CLAMP);
+        digitSegs = buildDigits(new CornerPathEffect(2.5f * s));
         buildHand();
-        sdPath = buildSd();
+        sdRound = rounded(buildSd(), new CornerPathEffect(4f * s));
+        warnRound = buildWarning();
+        menuShaders = null;
+        clockStale = true;
+        stillGen++;
         introBody = null;
         for (Channel c : channels) {
             c.art = null;
@@ -583,6 +642,9 @@ public class WiiMenuView extends View {
                 btnRight = right;
                 emptyArt = empty;
                 emptyShader = new BitmapShader(empty, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                baseShader = new BitmapShader(bg, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                underShader = new BitmapShader(bg, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                stillGen++;
                 invalidate();
             });
         }, "wii-base").start();
@@ -685,6 +747,64 @@ public class WiiMenuView extends View {
         p.op(q, Path.Op.UNION);
     }
 
+    /** The outline a fill with these corners draws, as a plain path. */
+    private static Path rounded(Path src, CornerPathEffect corners) {
+        Paint p = new Paint();
+        p.setPathEffect(corners);
+        Path out = new Path();
+        p.getFillPath(src, out);
+        return out;
+    }
+
+    /**
+     * The clock's digit segments as on the original: the outer ones are mitred into the box corners, the ones
+     * that meet the middle bar end in a point, and every joint keeps a small gap.
+     */
+    private Path[][] buildDigits(CornerPathEffect corners) {
+        Path[][] out = new Path[DIGIT_X.length][];
+        float t = DIGIT_T, g = DIGIT_GAP, k = t / 2f;
+        float ya = CLOCK_TOP, yb = CLOCK_TOP + DIGIT_H, ym = CLOCK_TOP + DIGIT_H / 2f;
+        for (int i = 0; i < DIGIT_X.length; i++) {
+            float xa = DIGIT_X[i], xb = DIGIT_X[i] + DIGIT_W;
+            out[i] = new Path[] {
+                    rounded(poly(xa + g, ya, xb - g, ya, xb - t - g, ya + t, xa + t + g, ya + t), corners),
+                    rounded(poly(xa + t + g, yb - t, xb - t - g, yb - t, xb - g, yb, xa + g, yb), corners),
+                    rounded(poly(xa, ya + g, xa + t, ya + t + g, xa + t, ym - k - g, xa + k, ym - g, xa, ym - k - g),
+                            corners),
+                    rounded(poly(xb, ya + g, xb, ym - k - g, xb - k, ym - g, xb - t, ym - k - g, xb - t, ya + t + g),
+                            corners),
+                    rounded(poly(xa, ym + k + g, xa + k, ym + g, xa + t, ym + k + g, xa + t, yb - t - g, xa, yb - g),
+                            corners),
+                    rounded(poly(xb, ym + k + g, xb, yb - g, xb - t, yb - t - g, xb - t, ym + k + g, xb - k, ym + g),
+                            corners),
+                    rounded(poly(xa + k + g, ym, xa + t + g, ym - k, xb - t - g, ym - k, xb - k - g, ym, xb - t - g,
+                            ym + k, xa + t + g, ym + k), corners),
+            };
+        }
+        return out;
+    }
+
+    /** A closed polygon through the given ref-px points, in screen px. */
+    private Path poly(float... pts) {
+        Path p = new Path();
+        p.moveTo(pts[0] * s, pts[1] * s);
+        for (int i = 2; i < pts.length; i += 2) p.lineTo(pts[i] * s, pts[i + 1] * s);
+        p.close();
+        return p;
+    }
+
+    /** The welcome screen's warning triangle, where drawIntro puts it. */
+    private Path buildWarning() {
+        float left = 240f * s, headY = 340f * s;
+        float cx = left + 34f * s, cy = headY - 22f * s, r = 38f * s;
+        Path p = new Path();
+        p.moveTo(cx, cy - r);
+        p.lineTo(cx + r * 1.1f, cy + r * 0.85f);
+        p.lineTo(cx - r * 1.1f, cy + r * 0.85f);
+        p.close();
+        return rounded(p, new CornerPathEffect(6f * s));
+    }
+
     private Path buildSd() {
         float l = SD_L * s, t = SD_T * s, r = SD_R * s, b = SD_B * s, cut = 9f * s;
         Path p = new Path();
@@ -729,7 +849,8 @@ public class WiiMenuView extends View {
         }
         handX = approach(handX, point[0], kHand, 0.3f);
         handY = approach(handY, point[1], kHand, 0.3f);
-        if (handX != point[0] || handY != point[1]) moving = true;
+        handMoving = handX != point[0] || handY != point[1];
+        if (handMoving) moving = true;
 
         float mt = menuOpen ? 1f : 0f;
         menuAlpha = approach(menuAlpha, mt, kMenu, 0.004f);
@@ -757,50 +878,267 @@ public class WiiMenuView extends View {
         lastFrameNanos = now;
         boolean moving = step(dt);
 
-        if (base != null) c.drawBitmap(base, 0f, 0f, null);
-        else c.drawColor(0xFFE9E9E9);
-        drawTiles(c);
-        drawArrows(c);
-        drawButton(c, btnLeft, WiiBase.BTN_CX, BTN_SETTINGS);
-        drawButton(c, btnRight, BTN_RIGHT_CX, BTN_INPUTS);
-        drawSd(c);
-        drawClock(c);
-        drawDate(c);
-        drawHand(c);
-        if (menuAlpha > 0f) drawMenu(c);
-        if (introAlpha > 0f) drawIntro(c);
+        if (clockStale || SystemClock.uptimeMillis() - clockAtMs >= CLOCK_CHECK_MS) updateClock();
+        collectItems();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && c.isHardwareAccelerated()) {
+            markDirect();
+            if (still == null) still = new Still();
+            if (signatureChanged() | !still.valid()) {
+                Canvas rc = still.begin(w, h);
+                for (int i = 0; i < itemCount; i++) if (!itemDirect[i]) drawItem(rc, i);
+                still.end();
+            }
+            // Drawn even under the opaque welcome screen: a node left out of a frame loses its layer, and the
+            // fade-out would then start with a full re-render.
+            still.draw(c);
+            boolean covered = Math.round(introAlpha * 255) >= 255;
+            for (int i = 0; i < itemCount; i++) {
+                if (itemDirect[i] && (!covered || itemKind[i] == IT_INTRO)) drawItem(c, i);
+            }
+        } else {
+            for (int i = 0; i < itemCount; i++) drawItem(c, i);
+        }
 
         if (moving || introAlpha > 0f) postInvalidateOnAnimation();
         else if (liveShown) postInvalidateDelayed(LIVE_FRAME_MS);
         else lastFrameNanos = 0;
     }
 
-    private void drawTiles(Canvas c) {
+    /** Lets go of the still layer while the menu is hidden; the next frame records it again. */
+    void trimMemory() {
+        if (still != null) still.discard();
+        lastSigLen = -1;
+        invalidate();
+    }
+
+    /** Lists this frame's parts in drawing order, with their screen bounds and whether each moves. */
+    private void collectItems() {
+        int cap = pages * SLOTS_PER_PAGE + 16;
+        if (itemKind.length < cap) {
+            itemKind = new int[cap];
+            itemArg = new int[cap];
+            itemDirect = new boolean[cap];
+            itemLive = new boolean[cap];
+            itemBox = new float[cap * 4];
+        }
+        itemCount = 0;
         liveShown = false;
+        add(IT_BASE, 0, 0f, 0f, w, h, false);
+        boolean scrolling = pagePos != page;
         int total = pages * SLOTS_PER_PAGE;
         for (int sl = 0; sl < total; sl++) {
             if (sl == focus) continue;
             slotRect(sl, pagePos, rect);
             if (rect.right < -10f * s || rect.left > w + 10f * s) continue;
-            drawTile(c, sl, rect, lift[sl]);
+            addTile(sl, scrolling);
         }
         if (focus >= 0) {
             slotRect(focus, pagePos, rect);
-            if (rect.right >= 0 && rect.left <= w) drawTile(c, focus, rect, lift[focus]);
+            if (rect.right >= 0 && rect.left <= w) addTile(focus, scrolling);
+        }
+        float cx2 = 2f * WiiBase.CX;
+        if (page < pages - 1) {
+            add(IT_ARROW_R, 0, (ARROW_L - 4f) * s, (ARROW_T - 4f) * s, (ARROW_TIP + 4f) * s, (ARROW_B + 4f) * s,
+                    false);
+        }
+        if (page > 0) {
+            add(IT_ARROW_L, 0, (cx2 - ARROW_TIP - 4f) * s, (ARROW_T - 4f) * s, (cx2 - ARROW_L + 4f) * s,
+                    (ARROW_B + 4f) * s, false);
+        }
+        if (btnLeft != null) addButton(IT_BTN_L, WiiBase.BTN_CX, BTN_SETTINGS);
+        if (btnRight != null) addButton(IT_BTN_R, BTN_RIGHT_CX, BTN_INPUTS);
+        float lf = lift[liftIndex(BTN_SD)], sc = 1f + 0.08f * lf;
+        float cx = (SD_L + SD_R) / 2f * s, cy = (SD_T + SD_B) / 2f * s;
+        float hw = ((SD_R - SD_L) / 2f + 12f) * s * sc, hh = ((SD_B - SD_T) / 2f + 12f) * s * sc;
+        add(IT_SD, 0, cx - hw, cy - hh, cx + hw, cy + hh, settling(lf));
+        add(IT_DIGITS, 0, (DIGIT_X[0] - 4f) * s, (CLOCK_TOP - 4f) * s, (DIGIT_X[3] + DIGIT_W + 4f) * s,
+                (CLOCK_TOP + DIGIT_H + 4f) * s, false);
+        if (colonOn) {
+            float d = COLON_DOT / 2f + 2f;
+            add(IT_COLON, 0, (COLON_X - d) * s, (COLON_Y1 - d) * s, (COLON_X + d) * s, (COLON_Y2 + d) * s, true);
+        }
+        add(IT_AMPM, 0, (AMPM_X - 6f) * s, (AMPM_BASE - AMPM_CAP - 8f) * s, (AMPM_M_X + AMPM_M_W + 6f) * s,
+                (AMPM_BASE + 8f) * s, false);
+        float half = dateTotal / 2f + 6f * s;
+        add(IT_DATE, 0, WiiBase.CX * s - half, (DATE_BASE - DATE_CAP - 14f) * s, WiiBase.CX * s + half,
+                (DATE_BASE + 18f) * s, false);
+        float u = HAND_UNIT * s;
+        matrix.setRotate(-8f);
+        matrix.postTranslate(handX, handY);
+        tmp.set(-20f * u, -3f * u, 32f * u, 64f * u);
+        matrix.mapRect(tmp);
+        add(IT_HAND, 0, tmp.left - 2f, tmp.top - 2f, tmp.right + 2f, tmp.bottom + 2f, handMoving);
+        if (menuAlpha > 0f) add(IT_MENU, 0, 0f, 0f, w, h, true);
+        if (introAlpha > 0f) add(IT_INTRO, 0, 0f, 0f, w, h, true);
+    }
+
+    private void add(int kind, int arg, float l, float t, float r, float b, boolean moves) {
+        int i = itemCount++;
+        itemKind[i] = kind;
+        itemArg[i] = arg;
+        itemDirect[i] = moves;
+        itemLive[i] = false;
+        itemBox[4 * i] = l;
+        itemBox[4 * i + 1] = t;
+        itemBox[4 * i + 2] = r;
+        itemBox[4 * i + 3] = b;
+    }
+
+    /** Adds the tile whose box slotRect just put in rect. */
+    private void addTile(int sl, boolean scrolling) {
+        Channel ch = sl < channels.size() ? channels.get(sl) : null;
+        boolean live = ch != null && ch.banner instanceof LiveArt && ((LiveArt) ch.banner).animating();
+        liveShown |= live;
+        float lf = lift[sl];
+        // How far the bulge, border and glow reach past the box; neighbouring tiles' reaches never meet.
+        float out = (TILE_BULGE + 1.5f + (lf > 0.01f ? (TILE_BORDER + 15f) / 2f : (TILE_BORDER + 1.5f) / 2f)) * s;
+        add(IT_TILE, sl, rect.left - out, rect.top - out, rect.right + out, rect.bottom + out,
+                scrolling || live || settling(lf));
+        itemLive[itemCount - 1] = live;
+    }
+
+    private void addButton(int kind, float cxRef, int id) {
+        float lf = lift[liftIndex(id)];
+        float r = (WiiBase.BTN_RING + 12f) * s * (1f + 0.06f * lf);
+        float cx = cxRef * s, cy = WiiBase.BTN_CY * s;
+        add(kind, 0, cx - r, cy - r, cx + r, cy + r, settling(lf));
+    }
+
+    private static boolean settling(float lf) {
+        return lf != 0f && lf != 1f;
+    }
+
+    /**
+     * A still part goes into the layer only when no moving part drawn before it overlaps it. Every pixel then
+     * still gets its parts in the original order, so the frame comes out as if all of it were drawn directly.
+     */
+    private void markDirect() {
+        float[] b = itemBox;
+        for (int i = 1; i < itemCount; i++) {
+            if (itemDirect[i]) continue;
+            int p = 4 * i;
+            for (int j = 0; j < i; j++) {
+                int q = 4 * j;
+                if (itemDirect[j] && b[p] < b[q + 2] && b[q] < b[p + 2] && b[p + 1] < b[q + 3] && b[q + 1] < b[p + 3]) {
+                    itemDirect[i] = true;
+                    break;
+                }
+            }
         }
     }
 
-    private void drawTile(Canvas c, int slot, RectF r, float lf) {
+    /** True when the still parts differ from the ones last recorded into the layer. */
+    private boolean signatureChanged() {
+        int need = 8 + itemCount * 3;
+        if (sig.length < need) sig = new int[need * 2];
+        int n = 0;
+        sig[n++] = stillGen;
+        sig[n++] = w;
+        sig[n++] = h;
+        sig[n++] = page;
+        sig[n++] = clockHour * 100 + clockMinute + (clockPm ? 10_000 : 0);
+        sig[n++] = dateText.hashCode();
+        for (int i = 0; i < itemCount; i++) {
+            if (itemDirect[i]) continue;
+            int kind = itemKind[i];
+            sig[n++] = kind << 24 | itemArg[i];
+            if (kind == IT_TILE) sig[n++] = Float.floatToIntBits(lift[itemArg[i]]);
+            else if (kind == IT_BTN_L) sig[n++] = Float.floatToIntBits(lift[liftIndex(BTN_SETTINGS)]);
+            else if (kind == IT_BTN_R) sig[n++] = Float.floatToIntBits(lift[liftIndex(BTN_INPUTS)]);
+            else if (kind == IT_SD) sig[n++] = Float.floatToIntBits(lift[liftIndex(BTN_SD)]);
+            else if (kind == IT_HAND) {
+                sig[n++] = Float.floatToIntBits(handX);
+                sig[n++] = Float.floatToIntBits(handY);
+            }
+        }
+        boolean same = n == lastSigLen;
+        for (int i = 0; same && i < n; i++) same = sig[i] == lastSig[i];
+        if (same) return false;
+        int[] t = lastSig;
+        lastSig = sig;
+        sig = t;
+        lastSigLen = n;
+        return true;
+    }
+
+    private void drawItem(Canvas c, int i) {
+        switch (itemKind[i]) {
+            case IT_BASE:
+                if (base != null) c.drawBitmap(base, 0f, 0f, null);
+                else c.drawColor(0xFFE9E9E9);
+                break;
+            case IT_TILE: {
+                int sl = itemArg[i];
+                slotRect(sl, pagePos, rect);
+                drawTile(c, sl, rect, lift[sl], itemLive[i]);
+                break;
+            }
+            case IT_ARROW_R:
+                drawArrow(c, ARROW_TIP * s, ARROW_Y * s, false);
+                break;
+            case IT_ARROW_L:
+                drawArrow(c, (2f * WiiBase.CX - ARROW_TIP) * s, ARROW_Y * s, true);
+                break;
+            case IT_BTN_L:
+                drawButton(c, btnLeft, WiiBase.BTN_CX, BTN_SETTINGS);
+                break;
+            case IT_BTN_R:
+                drawButton(c, btnRight, BTN_RIGHT_CX, BTN_INPUTS);
+                break;
+            case IT_SD:
+                drawSd(c);
+                break;
+            case IT_DIGITS:
+                drawDigits(c);
+                break;
+            case IT_COLON:
+                drawColon(c);
+                break;
+            case IT_AMPM:
+                drawAmPm(c);
+                break;
+            case IT_DATE:
+                drawDate(c);
+                break;
+            case IT_HAND:
+                drawHand(c);
+                break;
+            case IT_MENU:
+                drawMenu(c);
+                break;
+            case IT_INTRO:
+                drawIntro(c);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void drawTile(Canvas c, int slot, RectF r, float lf, boolean live) {
         int save = c.save();
         c.translate(r.left, r.top);
         Channel ch = slot < channels.size() ? channels.get(slot) : null;
-        if (ch != null && ch.banner instanceof LiveArt && ((LiveArt) ch.banner).animating()) {
+        if (live && ch != null) {
             // Straight into the frame: a tile bitmap redrawn every frame flickers on the TV, as the render thread
-            // can still be reading it while the next frame paints it over.
-            liveShown = true;
+            // can still be reading it while the next frame paints it over. Trimmed by painting the backdrop (all
+            // that lies under a tile) back around the frame rather than by clipPath: under a clip this shape,
+            // each of the banner's small draws that reaches the edge gets a mask of its own, drawn and uploaded
+            // every frame. The two ways differ only on the frame's antialiased rim, under the opaque border.
+            float pad = TILE_BULGE * s + 1f;
             int clip = c.save();
-            c.clipPath(tilePath);
+            c.clipRect(-pad, -pad, r.width() + pad, r.height() + pad);
             drawCropped(c, ch.banner, Math.round(r.width()), Math.round(r.height()));
+            if (underShader != null) {
+                matrix.setTranslate(-r.left, -r.top);
+                underShader.setLocalMatrix(matrix);
+                under.setShader(underShader);
+            } else {
+                under.setShader(null);
+                under.setColor(0xFFE9E9E9);
+            }
+            c.drawPath(tileOutside, under);
+            under.setShader(null);
             c.restoreToCount(clip);
         } else if (ch != null) {
             ensureArt(ch, Math.round(r.width()), Math.round(r.height()));
@@ -874,31 +1212,19 @@ public class WiiMenuView extends View {
         d.draw(cv);
     }
 
-    private void drawArrows(Canvas c) {
-        if (page < pages - 1) drawArrow(c, ARROW_TIP * s, ARROW_Y * s, false);
-        if (page > 0) drawArrow(c, (2f * WiiBase.CX - ARROW_TIP) * s, ARROW_Y * s, true);
-    }
-
     private void drawArrow(Canvas c, float x, float y, boolean flip) {
         int save = c.save();
         c.translate(x, y);
         if (flip) c.scale(-1f, 1f);
-        float l = (ARROW_L - ARROW_TIP) * s;
-        fill.setPathEffect(arrowCorners);
-        stroke.setPathEffect(arrowCorners);
         fill.setColor(0xFFFFFFFF);
-        fill.setShader(new LinearGradient(0f, (ARROW_T - ARROW_Y) * s, 0f, (ARROW_B - ARROW_Y) * s,
-                new int[] {0xFF6FCDF3, 0xFFA9E6FB, 0xFFDDF8FF, 0xFF9FE0F8, 0xFF62C5F0},
-                new float[] {0f, 0.35f, 0.5f, 0.62f, 1f}, Shader.TileMode.CLAMP));
-        c.drawPath(arrowPath, fill);
-        fill.setShader(new LinearGradient(l, 0f, 0f, 0f, 0x66FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
-        c.drawPath(arrowPath, fill);
+        fill.setShader(arrowBody);
+        c.drawPath(arrowRound, fill);
+        fill.setShader(arrowShine);
+        c.drawPath(arrowRound, fill);
         fill.setShader(null);
         stroke.setColor(0xFF2E66C2);
         stroke.setStrokeWidth(3.2f * s);
-        c.drawPath(arrowPath, stroke);
-        fill.setPathEffect(null);
-        stroke.setPathEffect(null);
+        c.drawPath(arrowRound, stroke);
         c.restoreToCount(save);
     }
 
@@ -925,15 +1251,12 @@ public class WiiMenuView extends View {
         int save = c.save();
         float sc = 1f + 0.08f * lf;
         c.scale(sc, sc, (SD_L + SD_R) / 2f * s, (SD_T + SD_B) / 2f * s);
-        CornerPathEffect round = new CornerPathEffect(4f * s);
-        fill.setPathEffect(round);
         c.translate(4f * s, 4f * s);
         fill.setColor(0x2E000000);
-        c.drawPath(sdPath, fill);
+        c.drawPath(sdRound, fill);
         c.translate(-4f * s, -4f * s);
         fill.setColor(0xFF5CC8EE);
-        c.drawPath(sdPath, fill);
-        fill.setPathEffect(null);
+        c.drawPath(sdRound, fill);
         fill.setColor(0xFFA9DDF3);
         c.drawRect((SD_L + 4f) * s, (SD_T + 4f) * s, (SD_R - 10f) * s, 915f * s, fill);
         fill.setColor(0xFFFFFFFF);
@@ -941,15 +1264,13 @@ public class WiiMenuView extends View {
         fill.setColor(0xFF4FC1EA);
         c.drawRect(366f * s, 975f * s, 422f * s, 987f * s, fill);
         if (lf > 0.01f) {
-            stroke.setPathEffect(round);
             for (int k = 3; k >= 1; k--) {
                 stroke.setColor(withAlpha(BLUE, (int) (lf * 80 / k)));
                 stroke.setStrokeWidth((2f + k * 4f) * s);
-                c.drawPath(sdPath, stroke);
+                c.drawPath(sdRound, stroke);
             }
-            stroke.setPathEffect(null);
         }
-        text.setTypeface(Typeface.create(sansBold, Typeface.BOLD_ITALIC));
+        text.setTypeface(sdFace);
         text.setTextSize(24f * s);
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(0xFF59BDE8);
@@ -957,42 +1278,101 @@ public class WiiMenuView extends View {
         c.restoreToCount(save);
     }
 
-    private void drawClock(Canvas c) {
-        int hour, minute;
-        boolean pm;
+    /** Reads the time and, when the day or language changed, words the date again. */
+    private void updateClock() {
+        clockStale = false;
+        clockAtMs = SystemClock.uptimeMillis();
+        String date;
         if (refPose) {
-            hour = 2;
-            minute = 7;
-            pm = true;
+            clockHour = 2;
+            clockMinute = 7;
+            clockPm = true;
+            date = "Fri 3/22";
+            dateKey = Integer.MIN_VALUE;
         } else {
             Calendar now = Calendar.getInstance();
-            hour = now.get(Calendar.HOUR);
-            if (hour == 0) hour = 12;
-            minute = now.get(Calendar.MINUTE);
-            pm = now.get(Calendar.AM_PM) == Calendar.PM;
+            int hour = now.get(Calendar.HOUR);
+            clockHour = hour == 0 ? 12 : hour;
+            clockMinute = now.get(Calendar.MINUTE);
+            clockPm = now.get(Calendar.AM_PM) == Calendar.PM;
+            Locale locale = getResources().getConfiguration().getLocales().get(0);
+            int key = now.get(Calendar.YEAR) * 400 + now.get(Calendar.DAY_OF_YEAR);
+            if (key == dateKey && locale.equals(dateLocale)) {
+                date = dateText;
+            } else {
+                dateKey = key;
+                dateLocale = locale;
+                java.util.Date at = now.getTime();
+                String day = new SimpleDateFormat("EEE", locale).format(at).replace(".", "");
+                if (!day.isEmpty()) day = day.substring(0, 1).toUpperCase(locale) + day.substring(1);
+                boolean monthFirst = "US".equals(locale.getCountry()) || "en".equals(locale.getLanguage());
+                date = day + " " + new SimpleDateFormat(monthFirst ? "M/d" : "d/M", locale).format(at);
+            }
         }
+        if (!date.equals(dateText) || dateScale != s) {
+            dateText = date;
+            dateScale = s;
+            measureDate();
+        }
+    }
+
+    private void dateFont() {
+        text.setTypeface(sansBold);
+        text.setTextSize(DATE_CAP / 0.711f * s);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(DATE_COLOR);
+        // The original sets its date looser than Roboto: about 2 px more between letters, 3 more at the space.
+        text.setLetterSpacing(DATE_TRACKING / (DATE_CAP / 0.711f));
+    }
+
+    private void measureDate() {
+        int space = dateText.indexOf(' ');
+        dateDay = space < 0 ? "" : dateText.substring(0, space);
+        dateRest = space < 0 ? dateText : dateText.substring(space + 1);
+        dateFont();
+        float gap = text.measureText(" ") + DATE_EXTRA_SPACE * s;
+        float wDay = dateDay.isEmpty() ? 0f : text.measureText(dateDay);
+        dateRestW = text.measureText(dateRest);
+        dateTotal = wDay + (dateDay.isEmpty() ? 0f : gap) + dateRestW;
+        text.setLetterSpacing(0f);
+    }
+
+    private void drawDigits(Canvas c) {
         fill.setColor(CLOCK_COLOR);
-        if (hour >= 10) drawDigit(c, DIGIT_X[0], hour / 10);
-        drawDigit(c, DIGIT_X[1], hour % 10);
-        drawDigit(c, DIGIT_X[2], minute / 10);
-        drawDigit(c, DIGIT_X[3], minute % 10);
-        if (colonOn) {
-            float d = COLON_DOT / 2f;
-            c.drawRoundRect((COLON_X - d) * s, (COLON_Y1 - d) * s, (COLON_X + d) * s, (COLON_Y1 + d) * s, 2f * s, 2f * s, fill);
-            c.drawRoundRect((COLON_X - d) * s, (COLON_Y2 - d) * s, (COLON_X + d) * s, (COLON_Y2 + d) * s, 2f * s, 2f * s, fill);
+        if (clockHour >= 10) drawDigit(c, 0, clockHour / 10);
+        drawDigit(c, 1, clockHour % 10);
+        drawDigit(c, 2, clockMinute / 10);
+        drawDigit(c, 3, clockMinute % 10);
+    }
+
+    private void drawDigit(Canvas c, int pos, int digit) {
+        int bits = SEGMENTS[digit];
+        Path[] segs = digitSegs[pos];
+        for (int k = 0; k < SEGMENT_ORDER.length; k++) {
+            if ((bits & SEGMENT_ORDER[k]) != 0) c.drawPath(segs[k], fill);
         }
+    }
+
+    private void drawColon(Canvas c) {
+        float d = COLON_DOT / 2f;
+        fill.setColor(CLOCK_COLOR);
+        c.drawRoundRect((COLON_X - d) * s, (COLON_Y1 - d) * s, (COLON_X + d) * s, (COLON_Y1 + d) * s, 2f * s, 2f * s, fill);
+        c.drawRoundRect((COLON_X - d) * s, (COLON_Y2 - d) * s, (COLON_X + d) * s, (COLON_Y2 + d) * s, 2f * s, 2f * s, fill);
+    }
+
+    private void drawAmPm(Canvas c) {
         text.setTypeface(sansBold);
         text.setTextSize(AMPM_CAP / 0.711f * s);
         text.setTextAlign(Paint.Align.LEFT);
         text.setColor(CLOCK_COLOR);
         // Letter by letter at the original's ink positions and widths; Roboto's M is wider than the original's.
-        drawInkLetter(c, pm ? "P" : "A", AMPM_X, AMPM_P_W);
+        drawInkLetter(c, clockPm ? "P" : "A", AMPM_X, AMPM_P_W);
         drawInkLetter(c, "M", AMPM_M_X, AMPM_M_W);
     }
 
     /** Draws one letter so its ink starts at inkLeft and spans inkWidth ref px, on the AM/PM baseline. */
     private void drawInkLetter(Canvas c, String letter, float inkLeft, float inkWidth) {
-        android.graphics.Rect b = new android.graphics.Rect();
+        android.graphics.Rect b = inkBounds;
         text.getTextBounds(letter, 0, 1, b);
         float sx = b.width() > 0 ? inkWidth * s / b.width() : 1f;
         int save = c.save();
@@ -1002,65 +1382,11 @@ public class WiiMenuView extends View {
         c.restoreToCount(save);
     }
 
-    /**
-     * One clock digit as on the original: the outer segments are mitred into the box corners, the ones that
-     * meet the middle bar end in a point, and every joint keeps a small gap.
-     */
-    private void drawDigit(Canvas c, float xRef, int digit) {
-        int bits = SEGMENTS[digit];
-        float t = DIGIT_T, g = DIGIT_GAP, k = t / 2f;
-        float xa = xRef, xb = xRef + DIGIT_W;
-        float ya = CLOCK_TOP, yb = CLOCK_TOP + DIGIT_H, ym = CLOCK_TOP + DIGIT_H / 2f;
-        fill.setPathEffect(digitCorners);
-        if ((bits & 0x01) != 0) poly(c, xa + g, ya, xb - g, ya, xb - t - g, ya + t, xa + t + g, ya + t);
-        if ((bits & 0x08) != 0) poly(c, xa + t + g, yb - t, xb - t - g, yb - t, xb - g, yb, xa + g, yb);
-        if ((bits & 0x20) != 0) poly(c, xa, ya + g, xa + t, ya + t + g, xa + t, ym - k - g, xa + k, ym - g, xa, ym - k - g);
-        if ((bits & 0x02) != 0) poly(c, xb, ya + g, xb, ym - k - g, xb - k, ym - g, xb - t, ym - k - g, xb - t, ya + t + g);
-        if ((bits & 0x10) != 0) poly(c, xa, ym + k + g, xa + k, ym + g, xa + t, ym + k + g, xa + t, yb - t - g, xa, yb - g);
-        if ((bits & 0x04) != 0) poly(c, xb, ym + k + g, xb, yb - g, xb - t, yb - t - g, xb - t, ym + k + g, xb - k, ym + g);
-        if ((bits & 0x40) != 0) {
-            poly(c, xa + k + g, ym, xa + t + g, ym - k, xb - t - g, ym - k, xb - k - g, ym, xb - t - g, ym + k,
-                    xa + t + g, ym + k);
-        }
-        fill.setPathEffect(null);
-    }
-
-    /** A filled polygon through the given ref-px points. */
-    private void poly(Canvas c, float... pts) {
-        path.reset();
-        path.moveTo(pts[0] * s, pts[1] * s);
-        for (int i = 2; i < pts.length; i += 2) path.lineTo(pts[i] * s, pts[i + 1] * s);
-        path.close();
-        c.drawPath(path, fill);
-    }
-
     private void drawDate(Canvas c) {
-        String date;
-        if (refPose) {
-            date = "Fri 3/22";
-        } else {
-            Locale locale = getResources().getConfiguration().getLocales().get(0);
-            java.util.Date now = new java.util.Date();
-            String day = new SimpleDateFormat("EEE", locale).format(now).replace(".", "");
-            if (!day.isEmpty()) day = day.substring(0, 1).toUpperCase(locale) + day.substring(1);
-            boolean monthFirst = "US".equals(locale.getCountry()) || "en".equals(locale.getLanguage());
-            date = day + " " + new SimpleDateFormat(monthFirst ? "M/d" : "d/M", locale).format(now);
-        }
-        text.setTypeface(sansBold);
-        text.setTextSize(DATE_CAP / 0.711f * s);
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setColor(DATE_COLOR);
-        // The original sets its date looser than Roboto: about 2 px more between letters, 3 more at the space.
-        text.setLetterSpacing(DATE_TRACKING / (DATE_CAP / 0.711f));
-        int space = date.indexOf(' ');
-        String day = space < 0 ? "" : date.substring(0, space);
-        String rest = space < 0 ? date : date.substring(space + 1);
-        float gap = text.measureText(" ") + DATE_EXTRA_SPACE * s;
-        float wDay = day.isEmpty() ? 0f : text.measureText(day), wRest = text.measureText(rest);
-        float total = wDay + (day.isEmpty() ? 0f : gap) + wRest;
-        float x = WiiBase.CX * s - total / 2f;
-        if (!day.isEmpty()) c.drawText(day, x, DATE_BASE * s, text);
-        c.drawText(rest, x + total - wRest, DATE_BASE * s, text);
+        dateFont();
+        float x = WiiBase.CX * s - dateTotal / 2f;
+        if (!dateDay.isEmpty()) c.drawText(dateDay, x, DATE_BASE * s, text);
+        c.drawText(dateRest, x + dateTotal - dateRestW, DATE_BASE * s, text);
         text.setLetterSpacing(0f);
     }
 
@@ -1108,7 +1434,7 @@ public class WiiMenuView extends View {
         rect.set(px, py, px + pw, py + ph);
         if (base != null) {
             fill.setColor(0xFFFFFFFF);
-            fill.setShader(new BitmapShader(base, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+            fill.setShader(baseShader);
             c.drawRoundRect(rect, rad, rad, fill);
             fill.setShader(null);
         } else {
@@ -1126,13 +1452,18 @@ public class WiiMenuView extends View {
         c.drawText(menuTitle, w / 2f, py + 92f * s, text);
 
         text.setTextSize(40f * s);
+        if (menuShaders == null || menuShaders.length != n) menuShaders = new LinearGradient[n];
         for (int i = 0; i < n; i++) {
             float iy = py + head + i * (itemH + gap);
             tmp.set(px + 90f * s, iy, px + pw - 90f * s, iy + itemH);
             float lf = i < menuLift.length ? menuLift[i] : 0f;
             float ir = itemH / 2f;
             fill.setColor(0xFFFFFFFF);
-            fill.setShader(new LinearGradient(0, tmp.top, 0, tmp.bottom, 0xFFFFFFFF, 0xFFE2E2E2, Shader.TileMode.CLAMP));
+            if (menuShaders[i] == null) {
+                menuShaders[i] = new LinearGradient(0, tmp.top, 0, tmp.bottom, 0xFFFFFFFF, 0xFFE2E2E2,
+                        Shader.TileMode.CLAMP);
+            }
+            fill.setShader(menuShaders[i]);
             c.drawRoundRect(tmp, ir, ir, fill);
             fill.setShader(null);
             if (lf > 0.01f) {
@@ -1210,22 +1541,13 @@ public class WiiMenuView extends View {
         c.restoreToCount(save);
     }
 
+    /** The sign is warnRound, built for this spot; cx, cy and r place its mark. */
     private void drawWarningSign(Canvas c, float cx, float cy, float r) {
-        path.reset();
-        path.moveTo(cx, cy - r);
-        path.lineTo(cx + r * 1.1f, cy + r * 0.85f);
-        path.lineTo(cx - r * 1.1f, cy + r * 0.85f);
-        path.close();
-        CornerPathEffect round = new CornerPathEffect(6f * s);
-        fill.setPathEffect(round);
-        stroke.setPathEffect(round);
         fill.setColor(0xFFFFC61E);
-        c.drawPath(path, fill);
+        c.drawPath(warnRound, fill);
         stroke.setColor(0xFF1E1E1E);
         stroke.setStrokeWidth(4.5f * s);
-        c.drawPath(path, stroke);
-        fill.setPathEffect(null);
-        stroke.setPathEffect(null);
+        c.drawPath(warnRound, stroke);
         text.setTypeface(sansBold);
         text.setTextSize(r * 1.25f);
         text.setTextAlign(Paint.Align.CENTER);
@@ -1244,5 +1566,36 @@ public class WiiMenuView extends View {
         int g = Math.round(((from >> 8) & 0xFF) + (((to >> 8) & 0xFF) - ((from >> 8) & 0xFF)) * t);
         int b = Math.round((from & 0xFF) + ((to & 0xFF) - (from & 0xFF)) * t);
         return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    /** A display list kept in its own GPU layer, which the render thread re-renders only after a new recording. */
+    @TargetApi(Build.VERSION_CODES.Q)
+    private static final class Still {
+        private final RenderNode node = new RenderNode("wii-still");
+
+        Still() {
+            node.setUseCompositingLayer(true, null);
+        }
+
+        Canvas begin(int width, int height) {
+            node.setPosition(0, 0, width, height);
+            return node.beginRecording(width, height);
+        }
+
+        void end() {
+            node.endRecording();
+        }
+
+        boolean valid() {
+            return node.hasDisplayList();
+        }
+
+        void draw(Canvas c) {
+            c.drawRenderNode(node);
+        }
+
+        void discard() {
+            node.discardDisplayList();
+        }
     }
 }

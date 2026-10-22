@@ -20,6 +20,7 @@ final class MiiAudio {
     private static final double BEAT = 60.0 / 108.0;
     private static final double SWING = 0.12 * BEAT;
     private static final float MASTER = 0.42f;
+    private static final double DT = 1.0 / RATE;
 
     private static final int V_BELL = 0, V_BASS = 1, V_EP = 2, V_HAT = 3, V_KICK = 4, V_RIM = 5, V_WHISTLE = 6,
             V_POP = 7, V_LIFT = 8, V_BOING = 9, V_POOF = 10, V_HOP = 11;
@@ -85,6 +86,11 @@ final class MiiAudio {
         long wait;
         float lp, prev;
         boolean on;
+        /**
+         * The music voices' decays and sine run as products stepped once a sample (e1..e3 times k1..k3, and sn/cs
+         * turned by rs/rc), giving the same values as calling exp and sin at each sample, for a fraction of the CPU.
+         */
+        double e1, k1, e2, k2, e3, k3, sn, cs, rs, rc;
     }
 
     private final boolean enabled;
@@ -233,7 +239,48 @@ final class MiiAudio {
         v.phase = 0;
         v.lp = 0f;
         v.prev = 0f;
+        v.e1 = 1.0;
+        v.e2 = 1.0;
+        v.e3 = 1.0;
+        v.k1 = Math.exp(-DT / decay);
+        v.sn = 0.0;
+        v.cs = 1.0;
+        switch (type) {
+            case V_BELL:
+                v.k2 = Math.exp(-DT / 0.06);
+                v.k3 = Math.exp(-DT / 0.025);
+                turn(v, f);
+                break;
+            case V_EP:
+                v.k2 = Math.exp(-DT / 0.08);
+                turn(v, f);
+                break;
+            case V_BASS:
+                turn(v, f);
+                break;
+            case V_KICK:
+                v.k2 = Math.exp(-DT / 0.03);
+                break;
+            case V_RIM:
+                turn(v, 1750);
+                break;
+            default:
+                break;
+        }
         v.on = true;
+    }
+
+    /** Sets the voice's sine to advance by f Hz per sample. */
+    private static void turn(Voice v, double f) {
+        double w = 2 * Math.PI * f * DT;
+        v.rs = Math.sin(w);
+        v.rc = Math.cos(w);
+    }
+
+    private static void advance(Voice v) {
+        double sn = v.sn;
+        v.sn = sn * v.rc + v.cs * v.rs;
+        v.cs = v.cs * v.rc - sn * v.rs;
     }
 
     private Voice free() {
@@ -286,42 +333,57 @@ final class MiiAudio {
                 double s;
                 switch (v.type) {
                     case V_BELL: {
-                        double env = Math.min(1.0, t / 0.004) * Math.exp(-t / v.decay);
-                        double p = 2 * Math.PI * v.f * t;
-                        s = env * (Math.sin(p) + 0.32 * Math.sin(2 * p) * Math.exp(-t / 0.06)
-                                + 0.12 * Math.sin(4 * p) * Math.exp(-t / 0.025));
+                        // sin 2p and sin 4p from sin p and cos p.
+                        double sn = v.sn, cs = v.cs;
+                        double s2 = 2 * sn * cs, c2 = cs * cs - sn * sn;
+                        double env = Math.min(1.0, t / 0.004) * v.e1;
+                        s = env * (sn + 0.32 * s2 * v.e2 + 0.12 * (2 * s2 * c2) * v.e3);
+                        v.e1 *= v.k1;
+                        v.e2 *= v.k2;
+                        v.e3 *= v.k3;
+                        advance(v);
                         break;
                     }
                     case V_BASS: {
                         v.phase += v.f * dt;
                         double ph = v.phase - Math.floor(v.phase);
                         double tri = ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph;
-                        double env = Math.min(1.0, t / 0.003) * Math.exp(-t / v.decay);
-                        s = env * (0.8 * tri + 0.4 * Math.sin(2 * Math.PI * v.phase));
+                        advance(v);
+                        double env = Math.min(1.0, t / 0.003) * v.e1;
+                        s = env * (0.8 * tri + 0.4 * v.sn);
+                        v.e1 *= v.k1;
                         break;
                     }
                     case V_EP: {
-                        double p = 2 * Math.PI * v.f * t;
-                        double env = Math.min(1.0, t / 0.006) * Math.exp(-t / v.decay);
-                        s = env * (Math.sin(p) + 0.25 * Math.sin(2 * p) * Math.exp(-t / 0.08));
+                        double sn = v.sn;
+                        double env = Math.min(1.0, t / 0.006) * v.e1;
+                        s = env * (sn + 0.25 * (2 * sn * v.cs) * v.e2);
+                        v.e1 *= v.k1;
+                        v.e2 *= v.k2;
+                        advance(v);
                         break;
                     }
                     case V_HAT: {
                         float n = rnd.nextFloat() * 2f - 1f;
                         float hp = n - v.prev;
                         v.prev = n;
-                        s = hp * 0.5 * Math.exp(-t / v.decay);
+                        s = hp * 0.5 * v.e1;
+                        v.e1 *= v.k1;
                         break;
                     }
                     case V_KICK: {
-                        double f = 48 + 95 * Math.exp(-t / 0.03);
+                        double f = 48 + 95 * v.e2;
                         v.phase += f * dt;
-                        s = Math.sin(2 * Math.PI * v.phase) * Math.exp(-t / v.decay);
+                        s = Math.sin(2 * Math.PI * v.phase) * v.e1;
+                        v.e1 *= v.k1;
+                        v.e2 *= v.k2;
                         break;
                     }
                     case V_RIM: {
                         float n = rnd.nextFloat() * 2f - 1f;
-                        s = (0.6 * n + Math.sin(2 * Math.PI * 1750 * t)) * Math.exp(-t / v.decay);
+                        s = (0.6 * n + v.sn) * v.e1;
+                        v.e1 *= v.k1;
+                        advance(v);
                         break;
                     }
                     case V_WHISTLE: {
