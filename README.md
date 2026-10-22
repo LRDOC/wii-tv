@@ -24,7 +24,7 @@ El repositorio no trae nada de Nintendo: ni logos, ni tipografías, ni imágenes
   - **wiiOS** (izquierda) abre los Ajustes de Android TV.
   - **SD** abre el reproductor multimedia de la TV (pendrive o disco USB).
   - **Sobre** (derecha) abre la lista de entradas HDMI y la TV en vivo.
-- **Manito** que sigue al canal o botón elegido.
+- **Manito** que sigue al canal o botón elegido. Al volver de una app está donde la dejaste, aunque Android haya cerrado el menú para liberar memoria.
 - **Canal Mii**: el primer canal. La plaza con tus Miis paseando sobre el piso de cuadrados, los botones de los costados (editar, crear, borrar, ayuda, desfile, mensajes), el silbato que los ordena por nombre, favoritos, color o género, y el editor para crearlos y cambiarlos. Los Miis se guardan en la TV. Sin nada más, todo se dibuja por código; con el paquete del canal usa las caras, los pelos, los íconos y los sonidos originales. El repositorio no trae esos archivos: [`tools/miipack`](tools/miipack/README.md) los toma de sus páginas públicas y arma el paquete en tu computadora.
 - **Canal Juegos**: al lado del Canal Mii. Su cartel es una pradera pixelada con un personajito azul que salta piedras y junta gemas. Adentro, tus juegos son cartuchos en un estante: elegís uno, apretás **Jugar** y arranca en [RetroArch](https://www.retroarch.com) con mGBA (Game Boy, Game Boy Color y Game Boy Advance). El botón **RetroArch** abre sus ajustes. Los juegos no vienen con el repositorio: ver [Juegos](#juegos).
 - **Sonidos** al moverte, al abrir algo, al cambiar de página, al abrir las entradas y al continuar desde el aviso. Usan el volumen de la TV.

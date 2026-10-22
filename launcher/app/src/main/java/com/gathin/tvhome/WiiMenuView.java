@@ -685,6 +685,46 @@ public class WiiMenuView extends View {
         return keys;
     }
 
+    // ---- where the hand is, kept for when Android closes the menu while an app runs ------------------
+
+    /** The channel under the hand, or null on an empty slot or a button. */
+    String handChannel() {
+        return focus >= 0 && focus < channels.size() ? channels.get(focus).key : null;
+    }
+
+    /** The slot or button under the hand; Integer.MIN_VALUE in the reference pose, which has none. */
+    int handSlot() {
+        return focus;
+    }
+
+    int handPage() {
+        return page;
+    }
+
+    /**
+     * Puts the hand back where it was, with no animation: on the same channel wherever it is now, or else on
+     * the same slot or button. Goes after setChannels.
+     */
+    void placeHand(String channel, int slot, int pg) {
+        if (refPose) return;
+        if (channel != null) {
+            for (int i = 0; i < channels.size(); i++) {
+                if (channels.get(i).key.equals(channel)) {
+                    slot = i;
+                    break;
+                }
+            }
+        }
+        boolean button = slot == BTN_SETTINGS || slot == BTN_SD || slot == BTN_INPUTS;
+        if (!button && (slot < 0 || slot >= pages * SLOTS_PER_PAGE)) return;
+        focus = slot;
+        page = button ? Math.max(0, Math.min(pg, pages - 1)) : slot / SLOTS_PER_PAGE;
+        pagePos = page;
+        handPlaced = false;
+        stillGen++;
+        invalidate();
+    }
+
     private boolean menuKey(int keyCode) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (menuFocus > 0) {

@@ -24,7 +24,7 @@ The repository contains nothing from Nintendo: no logos, fonts, images or sounds
   - **wiiOS** (left) opens Android TV Settings.
   - **SD** opens the TV's media player (USB drives).
   - **Envelope** (right) lists the HDMI inputs and live TV.
-- **Pointing hand** that follows the selected channel or button.
+- **Pointing hand** that follows the selected channel or button. Back from an app, it is where you left it, even if Android closed the menu to free memory.
 - **Mii Channel**: the first channel. The plaza with your Miis walking around on the squared floor, the side buttons (edit, new, delete, help, parade, mail), the whistle that lines them up by name, favourite, colour or gender, and the editor to make and change them. Miis are saved on the TV. On its own everything is drawn in code; with the channel pack it uses the original faces, hair, icons and sounds. The repository does not include those files: [`tools/miipack`](tools/miipack/README.md) (in Spanish) fetches them from their public pages and builds the pack on your computer.
 - **Games channel**: next to the Mii Channel. Its tile is a pixel-art meadow with a little blue runner hopping over rocks for gems. Inside, your games are cartridges on a shelf: pick one, press **Play** and it starts in [RetroArch](https://www.retroarch.com) with mGBA (Game Boy, Game Boy Color and Game Boy Advance). The **RetroArch** button opens its settings. The repository ships no games; see [Games](#games).
 - **Sounds** for moving, opening, turning the page, opening the inputs list and leaving the notice screen. They follow the TV volume.
