@@ -232,6 +232,8 @@ public class WiiMenuView extends View {
 
     private int clockHour = 12, clockMinute;
     private boolean clockPm, clockStale = true;
+    /** The TV's 24-hour setting: hours 0-23 and no AM/PM, as on the console's PAL menu. */
+    private boolean clock24;
     private long clockAtMs;
     private String dateText = "", dateDay = "", dateRest = "";
     private float dateRestW, dateTotal, dateScale;
@@ -342,6 +344,9 @@ public class WiiMenuView extends View {
         if (started) return;
         started = true;
         lastFrameNanos = 0;
+        // Changing the setting means leaving for Settings, so a read on every return is enough.
+        clock24 = android.text.format.DateFormat.is24HourFormat(getContext());
+        clockStale = true;
         removeCallbacks(blink);
         if (!refPose) postDelayed(blink, 1000);
         if (introAlpha > 0f && !introLeaving) postDelayed(autoContinue, INTRO_AUTO_MS);
@@ -958,8 +963,10 @@ public class WiiMenuView extends View {
             float d = COLON_DOT / 2f + 2f;
             add(IT_COLON, 0, (COLON_X - d) * s, (COLON_Y1 - d) * s, (COLON_X + d) * s, (COLON_Y2 + d) * s, true);
         }
-        add(IT_AMPM, 0, (AMPM_X - 6f) * s, (AMPM_BASE - AMPM_CAP - 8f) * s, (AMPM_M_X + AMPM_M_W + 6f) * s,
-                (AMPM_BASE + 8f) * s, false);
+        if (refPose || !clock24) {
+            add(IT_AMPM, 0, (AMPM_X - 6f) * s, (AMPM_BASE - AMPM_CAP - 8f) * s, (AMPM_M_X + AMPM_M_W + 6f) * s,
+                    (AMPM_BASE + 8f) * s, false);
+        }
         float half = dateTotal / 2f + 6f * s;
         add(IT_DATE, 0, WiiBase.CX * s - half, (DATE_BASE - DATE_CAP - 14f) * s, WiiBase.CX * s + half,
                 (DATE_BASE + 18f) * s, false);
@@ -1037,7 +1044,7 @@ public class WiiMenuView extends View {
         sig[n++] = w;
         sig[n++] = h;
         sig[n++] = page;
-        sig[n++] = clockHour * 100 + clockMinute + (clockPm ? 10_000 : 0);
+        sig[n++] = clockHour * 100 + clockMinute + (clockPm ? 10_000 : 0) + (clock24 ? 20_000 : 0);
         sig[n++] = dateText.hashCode();
         for (int i = 0; i < itemCount; i++) {
             if (itemDirect[i]) continue;
@@ -1291,10 +1298,15 @@ public class WiiMenuView extends View {
             dateKey = Integer.MIN_VALUE;
         } else {
             Calendar now = Calendar.getInstance();
-            int hour = now.get(Calendar.HOUR);
-            clockHour = hour == 0 ? 12 : hour;
+            if (clock24) {
+                clockHour = now.get(Calendar.HOUR_OF_DAY);
+                clockPm = false;
+            } else {
+                int hour = now.get(Calendar.HOUR);
+                clockHour = hour == 0 ? 12 : hour;
+                clockPm = now.get(Calendar.AM_PM) == Calendar.PM;
+            }
             clockMinute = now.get(Calendar.MINUTE);
-            clockPm = now.get(Calendar.AM_PM) == Calendar.PM;
             Locale locale = getResources().getConfiguration().getLocales().get(0);
             int key = now.get(Calendar.YEAR) * 400 + now.get(Calendar.DAY_OF_YEAR);
             if (key == dateKey && locale.equals(dateLocale)) {

@@ -19,7 +19,7 @@ El repositorio no trae nada de Nintendo: ni logos, ni tipografías, ni imágenes
 ## Qué trae
 
 - **Canales**: 4 columnas por 3 filas por página. La primera columna de la página siguiente asoma a la derecha y las flechas cambian de página. Tus apps llenan los canales y los que sobran quedan vacíos.
-- **Reloj y fecha**: reloj de segmentos de 12 horas con AM/PM, y la fecha corta en el idioma de la TV.
+- **Reloj y fecha**: reloj de segmentos, de 12 horas con AM/PM o de 24 horas según el formato de hora de la TV, y la fecha corta en el idioma de la TV.
 - **Botones de abajo**:
   - **wiiOS** (izquierda) abre los Ajustes de Android TV.
   - **SD** abre el reproductor multimedia de la TV (pendrive o disco USB).

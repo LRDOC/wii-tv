@@ -19,7 +19,7 @@ The repository contains nothing from Nintendo: no logos, fonts, images or sounds
 ## Features
 
 - **Channels**: 4 columns by 3 rows per page. The first column of the next page shows at the right edge, and the arrows turn the page. Your apps fill the channels; the rest stay empty.
-- **Clock and date**: a 12-hour segment clock with AM/PM, and the short date in the TV's language.
+- **Clock and date**: a segment clock, 12-hour with AM/PM or 24-hour to match the TV's time format, and the short date in the TV's language.
 - **Bottom buttons**:
   - **wiiOS** (left) opens Android TV Settings.
   - **SD** opens the TV's media player (USB drives).
