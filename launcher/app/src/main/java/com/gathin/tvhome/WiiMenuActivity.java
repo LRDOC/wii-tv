@@ -1,6 +1,7 @@
 package com.gathin.tvhome;
 
 import android.app.Activity;
+import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -9,6 +10,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.media.tv.TvContract;
@@ -44,6 +46,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private boolean introPending;
     private boolean appsDirty = true;
     private boolean resumed;
+    private final Rect zoomFrom = new Rect();
     private String liveTvPkg;
     private MiiStore miiStore;
     private int miiVersion = -1;
@@ -264,9 +267,19 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     }
 
     private void open(Intent intent) {
+        open(intent, false);
+    }
+
+    /** fromFocus: the app grows out of the chosen channel or button, as a channel zoomed open on the console. */
+    private void open(Intent intent, boolean fromFocus) {
         try {
-            startActivity(intent);
-            overridePendingTransition(R.anim.app_open_enter, R.anim.app_open_exit);
+            if (fromFocus && menu.focusBounds(zoomFrom)) {
+                startActivity(intent, ActivityOptions.makeScaleUpAnimation(menu, zoomFrom.left, zoomFrom.top,
+                        zoomFrom.width(), zoomFrom.height()).toBundle());
+            } else {
+                startActivity(intent);
+                overridePendingTransition(R.anim.app_open_enter, R.anim.app_open_exit);
+            }
         } catch (ActivityNotFoundException | SecurityException e) {
             Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
         }
@@ -274,7 +287,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
     @Override
     public void onChannel(WiiMenuView.Channel channel) {
-        open(channel.intent);
+        open(channel.intent, true);
     }
 
     @Override
@@ -285,7 +298,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
     @Override
     public void onSettingsButton() {
-        open(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        open(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), true);
     }
 
     @Override
@@ -296,7 +309,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
             Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
             return;
         }
-        open(media.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        open(media.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), true);
     }
 
     @Override

@@ -630,6 +630,23 @@ public class WiiMenuView extends View {
         }
     }
 
+    /** Where the focused channel or button is on screen, for an opening app to grow out of. */
+    boolean focusBounds(android.graphics.Rect out) {
+        if (focus >= 0) {
+            slotRect(focus, pagePos, tmp);
+        } else if (focus == BTN_SD) {
+            tmp.set(SD_L * s, SD_T * s, SD_R * s, SD_B * s);
+        } else if (focus == BTN_SETTINGS || focus == BTN_INPUTS) {
+            float cx = (focus == BTN_SETTINGS ? WiiBase.BTN_CX : BTN_RIGHT_CX) * s, cy = WiiBase.BTN_CY * s;
+            float r = WiiBase.BTN_RING * s;
+            tmp.set(cx - r, cy - r, cx + r, cy + r);
+        } else {
+            return false;
+        }
+        tmp.round(out);
+        return true;
+    }
+
     @Override
     protected void onSizeChanged(int nw, int nh, int ow, int oh) {
         w = Math.max(1, nw);
