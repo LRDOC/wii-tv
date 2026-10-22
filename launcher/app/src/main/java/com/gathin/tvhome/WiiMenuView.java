@@ -26,10 +26,12 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -53,6 +55,8 @@ public class WiiMenuView extends View {
 
     interface Listener {
         void onChannel(Channel channel);
+        /** A channel picked up with a held OK was put down somewhere else; the channel keys in their new order. */
+        void onChannelsMoved(List<String> keys);
         void onSettingsButton();
         void onSdButton();
         void onInputsButton();
@@ -88,7 +92,7 @@ public class WiiMenuView extends View {
         }
     }
 
-    private static final int SLOTS_PER_PAGE = 12;
+    private static final int SLOTS_PER_PAGE = WiiGrid.PER_PAGE;
     /** Frame interval while only a live tile moves: smooth enough for its slow loop, light on the TV. */
     private static final long LIVE_FRAME_MS = 33L;
     private static final int MIN_PAGES = 4;
@@ -116,6 +120,9 @@ public class WiiMenuView extends View {
     private static final float TILE_BULGE = 3f;
     private static final float TILE_BORDER = 4.5f;
     private static final int TILE_BORDER_COLOR = 0xFFB5B5B5;
+    /** A channel picked up to move it is drawn this much bigger, over a shadow this many ref px down and right. */
+    private static final float CARRY_SCALE = 1.05f;
+    private static final float CARRY_SHADOW = 6f;
 
     private static final float ARROW_L = 1797.5f;
     private static final float ARROW_TIP = 1850f;
@@ -197,6 +204,13 @@ public class WiiMenuView extends View {
     private boolean menuOpen;
     private float[] menuLift = new float[0];
 
+    /** OK went down on the grid and has not come up yet: it opens on the way up, unless held to pick up. */
+    private boolean okHeld;
+    /** The focused channel is picked up: the arrows carry it, OK or Back puts it down. */
+    private boolean carrying;
+    /** The channel order when it was picked up, to save only when it moved. */
+    private List<String> orderBefore;
+
     private float s = 1f;
     private int w = 1, h = 1;
 
@@ -261,6 +275,7 @@ public class WiiMenuView extends View {
         }
     };
     private final Runnable autoContinue = this::dismissIntro;
+    private final Runnable okHeldLong = this::pickUp;
 
     WiiMenuView(Context context, Listener listener) {
         super(context);
@@ -299,6 +314,9 @@ public class WiiMenuView extends View {
     // ---- state -----------------------------------------------------------------------------------
 
     void setChannels(List<Channel> list) {
+        // An app installed or removed mid-carry: the new list wins, the carry so far is dropped unsaved.
+        carrying = false;
+        orderBefore = null;
         channels.clear();
         channels.addAll(list);
         pages = Math.max(MIN_PAGES, (channels.size() + SLOTS_PER_PAGE - 1) / SLOTS_PER_PAGE);
@@ -357,6 +375,9 @@ public class WiiMenuView extends View {
         started = false;
         removeCallbacks(blink);
         removeCallbacks(autoContinue);
+        okHeld = false;
+        removeCallbacks(okHeldLong);
+        if (carrying) putDown(false);
     }
 
     void playIntro() {
@@ -401,10 +422,14 @@ public class WiiMenuView extends View {
         invalidate();
     }
 
-    /** Back: closes the menu or the welcome screen. False when there was nothing to close. */
+    /** Back: closes the menu or the welcome screen, or puts a carried channel down. False when there was nothing. */
     boolean back() {
         if (introAlpha > 0f) {
             dismissIntro();
+            return true;
+        }
+        if (carrying) {
+            putDown(true);
             return true;
         }
         if (menuOpen) {
@@ -417,6 +442,10 @@ public class WiiMenuView extends View {
 
     /** Home pressed with the menu already on screen: closes the list, or else goes back to the first channel. */
     void home() {
+        if (carrying) {
+            putDown(true);
+            return;
+        }
         if (menuOpen) {
             closeMenu();
             return;
@@ -451,7 +480,8 @@ public class WiiMenuView extends View {
                 || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
     }
 
-    boolean handleKey(int keyCode) {
+    boolean handleKey(KeyEvent event) {
+        int keyCode = event.getKeyCode();
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
                 || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE || keyCode == KeyEvent.KEYCODE_BACK) {
             return false;
@@ -477,6 +507,7 @@ public class WiiMenuView extends View {
             return true;
         }
         if (menuOpen) return menuKey(keyCode);
+        if (carrying) return carryKey(keyCode, event.getRepeatCount());
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
                 move(-1, 0);
@@ -504,36 +535,31 @@ public class WiiMenuView extends View {
                 return true;
             default:
                 if (isOk(keyCode)) {
-                    activate();
+                    okDown(event);
                     return true;
                 }
                 return false;
         }
     }
 
+    /** OK opens on the way up, so that holding it can pick the channel up instead. */
+    boolean handleKeyUp(int keyCode) {
+        if (!isOk(keyCode) || !okHeld) return false;
+        okHeld = false;
+        removeCallbacks(okHeldLong);
+        if (!carrying && !menuOpen && introAlpha <= 0f) activate();
+        return true;
+    }
+
     private void move(int dx, int dy) {
         int before = focus, pageBefore = page;
         if (focus >= 0) {
-            int pg = focus / SLOTS_PER_PAGE, i = focus % SLOTS_PER_PAGE, row = i / 4, col = i % 4;
-            if (dx < 0) {
-                if (col > 0) {
-                    focus--;
-                } else if (pg > 0) {
-                    focus = (pg - 1) * SLOTS_PER_PAGE + row * 4 + 3;
-                    page = pg - 1;
-                }
-            } else if (dx > 0) {
-                if (col < 3) {
-                    focus++;
-                } else if (pg < pages - 1) {
-                    focus = (pg + 1) * SLOTS_PER_PAGE + row * 4;
-                    page = pg + 1;
-                }
-            } else if (dy < 0) {
-                if (row > 0) focus -= 4;
-            } else if (row < 2) {
-                focus += 4;
-            } else {
+            int next = WiiGrid.neighbor(focus, dx, dy, pages);
+            if (next >= 0) {
+                focus = next;
+                page = next / SLOTS_PER_PAGE;
+            } else if (dy > 0) {
+                int col = focus % WiiGrid.COLS;
                 focus = col == 0 ? BTN_SETTINGS : col == 1 ? BTN_SD : BTN_INPUTS;
             }
         } else if (dy < 0) {
@@ -568,6 +594,95 @@ public class WiiMenuView extends View {
         else if (focus == BTN_SD) listener.onSdButton();
         else if (focus == BTN_INPUTS) listener.onInputsButton();
         else if (focus >= 0 && focus < channels.size()) listener.onChannel(channels.get(focus));
+    }
+
+    // ---- moving channels: hold OK on one, carry it with the arrows, OK or Back puts it down ----------
+
+    private void okDown(KeyEvent event) {
+        long hold = ViewConfiguration.getLongPressTimeout();
+        if (event.getRepeatCount() == 0) {
+            okHeld = true;
+            removeCallbacks(okHeldLong);
+            if (focus >= 0 && focus < channels.size()) postDelayed(okHeldLong, hold);
+        } else if (okHeld && event.getEventTime() - event.getDownTime() >= hold) {
+            // The remote's own repeat can come before the timer: a held key is a held key either way.
+            pickUp();
+        }
+    }
+
+    private void pickUp() {
+        removeCallbacks(okHeldLong);
+        if (!okHeld || carrying || !started || focus < 0 || focus >= channels.size()) return;
+        carrying = true;
+        orderBefore = channelKeys();
+        sound(WiiSounds.SELECT);
+        stillGen++;
+        invalidate();
+    }
+
+    private boolean carryKey(int keyCode, int repeat) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                carryTo(WiiGrid.neighbor(focus, -1, 0, pages));
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                carryTo(WiiGrid.neighbor(focus, 1, 0, pages));
+                return true;
+            case KeyEvent.KEYCODE_DPAD_UP:
+                carryTo(WiiGrid.neighbor(focus, 0, -1, pages));
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                carryTo(WiiGrid.neighbor(focus, 0, 1, pages));
+                return true;
+            case KeyEvent.KEYCODE_CHANNEL_UP:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_BUTTON_R1:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                carryTo(focus + SLOTS_PER_PAGE);
+                return true;
+            case KeyEvent.KEYCODE_CHANNEL_DOWN:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_BUTTON_L1:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                carryTo(focus - SLOTS_PER_PAGE);
+                return true;
+            default:
+                if (isOk(keyCode)) {
+                    // The OK that picked it up may still be held and repeating: only a new press puts it down.
+                    if (repeat == 0) putDown(true);
+                    return true;
+                }
+                return false;
+        }
+    }
+
+    /** Swaps the carried channel with the one at slot to. Channels fill the slots in order, so the empty ones stop it. */
+    private void carryTo(int to) {
+        if (to < 0 || to >= channels.size() || to == focus) return;
+        int pageBefore = page;
+        Collections.swap(channels, focus, to);
+        focus = to;
+        page = to / SLOTS_PER_PAGE;
+        sound(page != pageBefore ? WiiSounds.PAGE : WiiSounds.MOVE);
+        stillGen++;
+        invalidate();
+    }
+
+    private void putDown(boolean withSound) {
+        if (!carrying) return;
+        carrying = false;
+        if (withSound) sound(WiiSounds.SELECT);
+        stillGen++;
+        invalidate();
+        List<String> keys = channelKeys();
+        if (!keys.equals(orderBefore)) listener.onChannelsMoved(keys);
+        orderBefore = null;
+    }
+
+    private List<String> channelKeys() {
+        List<String> keys = new ArrayList<>(channels.size());
+        for (Channel ch : channels) keys.add(ch.key);
+        return keys;
     }
 
     private boolean menuKey(int keyCode) {
@@ -1055,6 +1170,7 @@ public class WiiMenuView extends View {
         float lf = lift[sl];
         // How far the bulge, border and glow reach past the box; neighbouring tiles' reaches never meet.
         float out = (TILE_BULGE + 1.5f + (lf > 0.01f ? (TILE_BORDER + 15f) / 2f : (TILE_BORDER + 1.5f) / 2f)) * s;
+        if (carrying && sl == focus) out += (TILE_W * (CARRY_SCALE - 1f) / 2f + CARRY_SHADOW + 2f) * s;
         add(IT_TILE, sl, rect.left - out, rect.top - out, rect.right + out, rect.bottom + out,
                 scrolling || live || settling(lf));
         itemLive[itemCount - 1] = live;
@@ -1180,6 +1296,14 @@ public class WiiMenuView extends View {
     private void drawTile(Canvas c, int slot, RectF r, float lf, boolean live) {
         int save = c.save();
         c.translate(r.left, r.top);
+        boolean carried = carrying && slot == focus;
+        if (carried) {
+            c.scale(CARRY_SCALE, CARRY_SCALE, r.width() / 2f, r.height() / 2f);
+            c.translate(CARRY_SHADOW * s, CARRY_SHADOW * s);
+            fill.setColor(0x30000000);
+            c.drawPath(tilePath, fill);
+            c.translate(-CARRY_SHADOW * s, -CARRY_SHADOW * s);
+        }
         Channel ch = slot < channels.size() ? channels.get(slot) : null;
         if (live && ch != null) {
             // Straight into the frame: a tile bitmap redrawn every frame flickers on the TV, as the render thread
@@ -1193,6 +1317,8 @@ public class WiiMenuView extends View {
             drawCropped(c, ch.banner, Math.round(r.width()), Math.round(r.height()));
             if (underShader != null) {
                 matrix.setTranslate(-r.left, -r.top);
+                // Undoes the carried tile's scale too, so the backdrop still lines up with the one around it.
+                if (carried) matrix.postScale(1f / CARRY_SCALE, 1f / CARRY_SCALE, r.width() / 2f, r.height() / 2f);
                 underShader.setLocalMatrix(matrix);
                 under.setShader(underShader);
             } else {

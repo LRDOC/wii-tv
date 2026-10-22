@@ -18,7 +18,7 @@ The repository contains nothing from Nintendo: no logos, fonts, images or sounds
 
 ## Features
 
-- **Channels**: 4 columns by 3 rows per page. The first column of the next page shows at the right edge, and the arrows turn the page. Your apps fill the channels; the rest stay empty. Opening a channel grows the app out of its frame, as on the console.
+- **Channels**: 4 columns by 3 rows per page. The first column of the next page shows at the right edge, and the arrows turn the page. Your apps fill the channels; the rest stay empty. Opening a channel grows the app out of its frame, as on the console. To move a channel, hold OK on it and carry it with the arrows; OK puts it down and the TV keeps the order.
 - **Clock and date**: a segment clock, 12-hour with AM/PM or 24-hour to match the TV's time format, and the short date in the TV's language.
 - **Bottom buttons**:
   - **wiiOS** (left) opens Android TV Settings.
@@ -68,6 +68,7 @@ Run every command from the repository folder, and replace `192.168.1.50` with yo
 | Arrows | Move the hand. Right from the last column turns the page; down from the bottom row goes to the buttons. |
 | CH+ / CH- | Turn the page (fast-forward and rewind too). |
 | OK | Opens the selected channel or button. |
+| Hold OK | Picks the channel up to move it: the arrows swap it with the next one, and OK or Back put it down. |
 | Back | Closes the inputs list or the notice screen. |
 | Home | Back to the menu. On the menu, back to the first page. |
 

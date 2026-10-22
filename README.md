@@ -18,7 +18,7 @@ El repositorio no trae nada de Nintendo: ni logos, ni tipografías, ni imágenes
 
 ## Qué trae
 
-- **Canales**: 4 columnas por 3 filas por página. La primera columna de la página siguiente asoma a la derecha y las flechas cambian de página. Tus apps llenan los canales y los que sobran quedan vacíos. Al abrir un canal, la app crece desde su cuadro, como en la consola.
+- **Canales**: 4 columnas por 3 filas por página. La primera columna de la página siguiente asoma a la derecha y las flechas cambian de página. Tus apps llenan los canales y los que sobran quedan vacíos. Al abrir un canal, la app crece desde su cuadro, como en la consola. Para cambiar un canal de lugar, mantené OK sobre él y movelo con las flechas; OK lo suelta y el orden queda guardado en la TV.
 - **Reloj y fecha**: reloj de segmentos, de 12 horas con AM/PM o de 24 horas según el formato de hora de la TV, y la fecha corta en el idioma de la TV.
 - **Botones de abajo**:
   - **wiiOS** (izquierda) abre los Ajustes de Android TV.
@@ -126,6 +126,7 @@ Mientras la depuración esté activada, cualquier computadora que ya autorizaste
 | Flechas | Mueven la manito. Desde la última columna, la flecha derecha pasa de página. Desde la fila de abajo, la flecha abajo baja a los botones. |
 | CH+ / CH- | Pasan de página (también avance y retroceso rápido). |
 | OK | Abre el canal o el botón elegido. |
+| Mantener OK | Agarra el canal para moverlo: las flechas lo cambian de lugar con el de al lado, y OK o Atrás lo sueltan. |
 | Atrás | Cierra la lista de entradas o la pantalla de aviso. |
 | Home | Vuelve al menú. Si ya estás en el menú, vuelve a la primera página. |
 

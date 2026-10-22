@@ -23,12 +23,14 @@ import android.provider.Settings;
 import android.view.KeyEvent;
 import android.widget.Toast;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -38,6 +40,8 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private static final String MEDIA_PLAYER = "com.mediatek.wwtv.mediaplayer";
     /** Debug: freeze the menu in the reference capture's state, for comparing screenshots against it. */
     static final String EXTRA_REF_POSE = "ref_pose";
+    /** The owner's channel order, in Order's format; the other home screen keeps its own in Order.FILE_NAME. */
+    private static final String ORDER_FILE = "wii-order.txt";
 
     private WiiMenuView menu;
     private WiiSounds sounds;
@@ -52,6 +56,8 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private int miiVersion = -1;
     private Typeface miiFace;
     private GamesBanner gamesBanner;
+    /** The channel keys in the usual order, before the owner's: putting them back that way forgets the saved one. */
+    private List<String> usualOrder = Collections.emptyList();
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
@@ -175,8 +181,14 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (menu.handleKey(keyCode)) return true;
+        if (menu.handleKey(event)) return true;
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (menu.handleKeyUp(keyCode)) return true;
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override
@@ -236,7 +248,29 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         while (at < channels.size() && dock.contains(channels.get(at).key)) at++;
         channels.add(at, miiChannel());
         if (games) channels.add(at + 1, gamesChannel());
+        List<String> usual = new ArrayList<>(channels.size());
+        for (WiiMenuView.Channel ch : channels) usual.add(ch.key);
+        usualOrder = usual;
+        // Channels the owner moved come first in that order; the sort is stable, so the rest (new installs too)
+        // keep the usual order after them.
+        Map<String, Integer> saved = Order.ranks(Order.load(orderFile()), dock);
+        if (!saved.isEmpty()) Collections.sort(channels, (a, b) -> Order.compare(saved, a.key, b.key));
         menu.setChannels(channels);
+    }
+
+    private File orderFile() {
+        return new File(getFilesDir(), ORDER_FILE);
+    }
+
+    @Override
+    public void onChannelsMoved(List<String> keys) {
+        if (keys.equals(usualOrder)) {
+            // Back to the usual order: with no file, new apps go where they would have gone anyway.
+            orderFile().delete();
+            return;
+        }
+        List<String> dock = Arrays.asList(getResources().getStringArray(R.array.dock_apps));
+        Order.save(orderFile(), new Order(Order.dockKey(dock), keys));
     }
 
     /** The built-in Games channel, after the Mii channel; its tile is a pixel meadow with a runner. */
