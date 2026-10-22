@@ -66,6 +66,7 @@ Run every command from the repository folder, and replace `192.168.1.50` with yo
 | Key | Action |
 | --- | --- |
 | Arrows | Move the hand. Right from the last column turns the page; down from the bottom row goes to the buttons. |
+| CH+ / CH- | Turn the page (fast-forward and rewind too). |
 | OK | Opens the selected channel or button. |
 | Back | Closes the inputs list or the notice screen. |
 | Home | Back to the menu. |

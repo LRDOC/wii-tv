@@ -474,6 +474,18 @@ public class WiiMenuView extends View {
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 move(0, 1);
                 return true;
+            case KeyEvent.KEYCODE_CHANNEL_UP:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_BUTTON_R1:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                turnPage(1);
+                return true;
+            case KeyEvent.KEYCODE_CHANNEL_DOWN:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_BUTTON_L1:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                turnPage(-1);
+                return true;
             default:
                 if (isOk(keyCode)) {
                     activate();
@@ -522,6 +534,16 @@ public class WiiMenuView extends View {
             sound(page != pageBefore ? WiiSounds.PAGE : WiiSounds.MOVE);
             invalidate();
         }
+    }
+
+    /** A whole page at a time; the hand keeps its place in the grid. */
+    private void turnPage(int dir) {
+        int to = page + dir;
+        if (to < 0 || to >= pages) return;
+        page = to;
+        if (focus >= 0) focus = to * SLOTS_PER_PAGE + focus % SLOTS_PER_PAGE;
+        sound(WiiSounds.PAGE);
+        invalidate();
     }
 
     private void activate() {

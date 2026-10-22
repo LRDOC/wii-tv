@@ -124,6 +124,7 @@ Mientras la depuración esté activada, cualquier computadora que ya autorizaste
 | Tecla | Qué hace |
 | --- | --- |
 | Flechas | Mueven la manito. Desde la última columna, la flecha derecha pasa de página. Desde la fila de abajo, la flecha abajo baja a los botones. |
+| CH+ / CH- | Pasan de página (también avance y retroceso rápido). |
 | OK | Abre el canal o el botón elegido. |
 | Atrás | Cierra la lista de entradas o la pantalla de aviso. |
 | Home | Vuelve al menú. |
