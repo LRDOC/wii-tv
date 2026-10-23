@@ -14,7 +14,7 @@ English: [README.en.md](README.en.md)
 
 wii-tv es un proyecto de fans. No está afiliado a Nintendo ni tiene su aprobación. "Wii" es una marca de Nintendo.
 
-El repositorio no incluye archivos extraídos de Nintendo. La interfaz se dibuja por código (`WiiMenuView`, `WiiBase`, `WiiPalette`). Los 8 efectos y las 3 músicas que trae son remakes que hizo Soffizlly para este proyecto: ver [audios y créditos](tools/sounds/README.md).
+El repositorio no incluye archivos extraídos de Nintendo. La interfaz se dibuja por código (`WiiMenuView`, `WiiBase`, `WiiPalette`). Los 7 efectos y las 3 músicas que trae son remakes que hizo Soffizlly para este proyecto: ver [audios y créditos](tools/sounds/README.md).
 
 ## Qué trae
 
@@ -28,7 +28,7 @@ El repositorio no incluye archivos extraídos de Nintendo. La interfaz se dibuja
 - **Canal Mii**: el primer canal. La plaza con tus Miis paseando sobre el piso de cuadrados, los botones de los costados (editar, crear, borrar, ayuda, desfile, mensajes), el silbato que los ordena por nombre, favoritos, color o género, y el editor para crearlos y cambiarlos. Los Miis se guardan en la TV. Sin nada más, todo se dibuja por código; con el paquete del canal usa las caras, los pelos, los íconos y los sonidos originales. El repositorio no trae esos archivos: [`tools/miipack`](tools/miipack/README.md) los toma de sus páginas públicas y arma el paquete en tu computadora.
 - **Canal Juegos**: al lado del Canal Mii. Su cartel es una pradera pixelada con un personajito azul que salta piedras y junta gemas. Adentro, tus juegos son cartuchos en un estante: elegís uno, apretás **Jugar** y arranca en [RetroArch](https://www.retroarch.com) con mGBA (Game Boy, Game Boy Color y Game Boy Advance). El botón **RetroArch** abre sus ajustes. Los juegos no vienen con el repositorio: ver [Juegos](#juegos).
 - **Sonidos** al moverte, al abrir algo, al cambiar de página, al abrir las entradas y al continuar desde el aviso. Usan el volumen de la TV.
-- **Audio incluido**: 8 efectos y 3 músicas, para el menú, la Plaza Mii y el editor. Primero suena el arranque y la música del menú entra un segundo después. No hay que instalar nada aparte.
+- **Audio incluido**: 7 efectos y 3 músicas, para el menú, la Plaza Mii y el editor. Primero suena el arranque y la música del menú entra un segundo después. No hay que instalar nada aparte.
 - **Pantalla de aviso** al prender la TV. La cierran OK o las flechas, o se va sola a los 12 segundos. No vuelve a aparecer cuando salís de una app.
 - **Siempre arranca en el menú**: al prender la TV vuelve al menú aunque hayas dejado otra app abierta.
 - Protector de pantalla con reloj (opcional).
@@ -162,11 +162,11 @@ Si elegís otro juego, o el botón RetroArch del canal, RetroArch cierra el jueg
 
 ## Audio incluido
 
-El APK trae los 11 remakes de Soffizlly: 8 efectos y 3 músicas. Suenan apenas lo instalás, sin bajar nada más.
+El APK trae los remakes de Soffizlly: 7 efectos y 3 músicas. Suenan apenas lo instalás, sin bajar nada más.
 
 Al cerrar el aviso suena el arranque, y la música del menú entra un segundo después, en bucle. La Plaza Mii y el editor tienen su propia música. La música se pausa cuando salís de cada pantalla, y espera si otra app está reproduciendo algo.
 
-Los botones wiiOS, SD y el sobre usan `wii_big_buttons.ogg`. `wii_woop.ogg` suena una sola vez cuando dejás la manito medio segundo sobre un canal; si antes te movés, abrís un panel o salís del menú, no suena. `wii_hover_delay_ms` en `config.xml` cambia la demora, y `0` lo apaga.
+Los botones wiiOS, SD y el sobre, y los paneles del Canal Mii, usan `wii_big_buttons.ogg`. `wii_woop.ogg` suena una sola vez cuando dejás la manito medio segundo sobre un canal; si antes te movés, abrís un panel o salís del menú, no suena. `wii_hover_delay_ms` en `config.xml` cambia la demora, y `0` lo apaga.
 
 Los archivos están en `launcher/app/src/main/res/raw/`: los efectos y la música del menú en OGG Vorbis, y las de la Plaza y el editor en Opus. Mirá el [mapa de audios y créditos](tools/sounds/README.md). Para usar tu propia música, mirá [Tu propia música](#tu-propia-música).
 

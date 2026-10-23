@@ -14,7 +14,7 @@ Español: [README.md](README.md)
 
 wii-tv is a fan project. It is not affiliated with or endorsed by Nintendo. "Wii" is a trademark of Nintendo.
 
-The repository includes no files extracted from Nintendo. The interface is drawn in code (`WiiMenuView`, `WiiBase`, `WiiPalette`). The 8 bundled effects and 3 music tracks are original remakes contributed by Soffizlly; see [audio and credits](tools/sounds/README.md).
+The repository includes no files extracted from Nintendo. The interface is drawn in code (`WiiMenuView`, `WiiBase`, `WiiPalette`). The 7 bundled effects and 3 music tracks are original remakes contributed by Soffizlly; see [audio and credits](tools/sounds/README.md).
 
 ## Features
 
@@ -28,7 +28,7 @@ The repository includes no files extracted from Nintendo. The interface is drawn
 - **Mii Channel**: the first channel. The plaza with your Miis walking around on the squared floor, the side buttons (edit, new, delete, help, parade, mail), the whistle that lines them up by name, favourite, colour or gender, and the editor to make and change them. Miis are saved on the TV. On its own everything is drawn in code; with the channel pack it uses the original faces, hair, icons and sounds. The repository does not include those files: [`tools/miipack`](tools/miipack/README.md) (in Spanish) fetches them from their public pages and builds the pack on your computer.
 - **Games channel**: next to the Mii Channel. Its tile is a pixel-art meadow with a little blue runner hopping over rocks for gems. Inside, your games are cartridges on a shelf: pick one, press **Play** and it starts in [RetroArch](https://www.retroarch.com) with mGBA (Game Boy, Game Boy Color and Game Boy Advance). The **RetroArch** button opens its settings. The repository ships no games; see [Games](#games).
 - **Sounds** for moving, opening, turning the page, opening the inputs list and leaving the notice screen. They follow the TV volume.
-- **Bundled audio**: 8 effects and 3 music tracks for Home, Mii Plaza and the editor. The jingle starts first; menu music enters one second later. No separate audio installation is needed.
+- **Bundled audio**: 7 effects and 3 music tracks for Home, Mii Plaza and the editor. The jingle starts first; menu music enters one second later. No separate audio installation is needed.
 - **Notice screen** at power-on. OK or the arrows close it, or it leaves by itself after 12 seconds. It does not come back when you leave an app.
 - **Always starts on the menu**: turning the TV on brings the menu back even if another app was open.
 - Clock screensaver (optional).
@@ -84,11 +84,11 @@ In a game, the TV remote's arrows are the D-pad, OK is A, Back is B, and red, gr
 
 ## Bundled audio
 
-The APK includes all 11 remakes contributed by Soffizlly: 8 effects and 3 music tracks. They work immediately after installation, without downloading files or running extra tools.
+The APK includes the remakes contributed by Soffizlly: 7 effects and 3 music tracks. They work immediately after installation, without downloading files or running extra tools.
 
 After the notice screen closes, the jingle plays first and looping menu music starts one second later. Mii Plaza and the editor have separate tracks. Music pauses when its screen leaves the foreground and respects audio focus.
 
-The wiiOS, SD and envelope buttons share `wii_big_buttons.ogg`. `wii_woop.ogg` plays once after the cursor stays on a channel for 500 ms. Navigation, opening a panel or leaving Home cancels the countdown. Change `wii_hover_delay_ms` in `config.xml` to adjust it; `0` disables it.
+The wiiOS, SD and envelope buttons and the Mii Channel panels share `wii_big_buttons.ogg`. `wii_woop.ogg` plays once after the cursor stays on a channel for 500 ms. Navigation, opening a panel or leaving Home cancels the countdown. Change `wii_hover_delay_ms` in `config.xml` to adjust it; `0` disables it.
 
 Assets are in `launcher/app/src/main/res/raw/`: effects and menu music in OGG Vorbis, Plaza and editor music in Opus. See the [audio map and credits](tools/sounds/README.md). To use your own music, see [Your own music](#your-own-music).
 
