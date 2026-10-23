@@ -98,7 +98,8 @@ final class MiiChannelView extends View {
         music = new WiiMusic(context, sound, 40, () -> audio.setMusic(true));
         music.setTrack(R.raw.wii_music_plaza);
         audio.setMusic(!music.hasTrack());
-        sounds = new WiiSounds(context, sound);
+        sounds = new WiiSounds(context, sound,
+                WiiSounds.MOVE, WiiSounds.SELECT, WiiSounds.PAGE, WiiSounds.BACK, WiiSounds.MENU);
         packSounds = sound && pack != null ? new MiiPackSounds(context, pack) : null;
         store = new MiiStore(context);
         plaza.setMiis(store.loadOrSeed(rnd, SEED_COUNT));
