@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Google TV icon (four-colour screen frame), for the menu's Google TV channel. Square viewport, the
+     548.3 x 400 mark centred in it, because the channel draws its icon into a square. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="548.3"
+    android:viewportHeight="548.3">
+    <group android:translateY="74.15">
+        <path android:fillColor="#4285F4"
+            android:pathData="M477.4,0H153.2c-28.2,0 -51.1,22.9 -51.1,51.1v51.1h395.1c28.2,0 51.1,22.9 51.1,51.1V70.9C548.3,31.7 516.6,0 477.4,0L477.4,0z" />
+        <path android:fillColor="#34A853"
+            android:pathData="M70.9,0C31.7,0 0,31.7 0,70.9v175.9c0,28.2 22.9,51.1 51.1,51.1h51.1V51.1c0,0 0,0 0,0C102.2,22.9 125,0 153.2,0H70.9L70.9,0z" />
+        <path android:fillColor="#FBBC04"
+            android:pathData="M70.9,400h324.2c28.2,0 51.1,-22.9 51.1,-51.1v-51.1H51.1C22.9,297.8 0,275 0,246.8v82.3C0,368.3 31.7,400 70.9,400L70.9,400z" />
+        <path android:fillColor="#EA4335"
+            android:pathData="M477.4,400c39.2,0 70.9,-31.7 70.9,-70.9V153.2c0,-28.2 -22.9,-51.1 -51.1,-51.1h-51.1v246.8c0,0 0,0 0,0c0,28.2 -22.9,51.1 -51.1,51.1H477.4L477.4,400z" />
+    </group>
+</vector>

@@ -393,8 +393,8 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     }
 
     /**
-     * The stock home screen as a channel: its icon over stock_home_label, as the console drew a plain channel (Google
-     * TV's own banner is a blank blue card). Null when stock_home_component is unset or gone.
+     * The stock home screen as a channel: the Google TV icon over stock_home_label, as the console drew a plain channel
+     * (launcherx's own icon and banner are a blank blue card). Null when stock_home_component is unset or gone.
      */
     private WiiMenuView.Channel stockChannel() {
         Intent intent = stockHomeIntent();
@@ -403,7 +403,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         ResolveInfo ri = pm.resolveActivity(intent, 0);
         if (ri == null) return null;
         return new WiiMenuView.Channel(getPackageName() + ".stock", getString(R.string.stock_home_label), null,
-                ri.loadIcon(pm), intent);
+                getDrawable(R.drawable.ic_google_tv), intent);
     }
 
     private Intent stockHomeIntent() {
