@@ -193,8 +193,8 @@ Cambiá lo que quieras y volvé a correr `launcher/build-and-install.sh` para ap
 | Apps que no aparecen como canal | `hidden_apps`, en el mismo archivo. |
 | Texto del botón izquierdo | `wii_settings_label` (por defecto `wiiOS`). |
 | Sonidos sí o no | `wii_sounds`. |
-| Música del menú sí o no | `wii_music`. |
-| Volumen de la música | `wii_music_volume`, en porcentaje del volumen del archivo (100 por defecto). |
+| Música sí o no (menú, Plaza Mii y editor) | `wii_music`. |
+| Volumen de la música | `wii_music_volume`, en porcentaje del volumen del archivo (100 por defecto). La Plaza y el editor suenan al 40 % de eso. |
 | App de TV en vivo de la lista de entradas | `live_tv_package`. |
 | Textos de la pantalla de aviso | `wii_intro_title`, `wii_intro_body` y `wii_intro_continue` en `res/values*/strings.xml`. `values-es-rAR` usa voseo. |
 | Archivos de audio incluidos | `launcher/app/src/main/res/raw/`; ver `tools/sounds/README.md`. El generador antiguo escribe alternativas en `tools/sounds/build/`. |

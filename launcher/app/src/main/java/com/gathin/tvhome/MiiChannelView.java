@@ -95,7 +95,10 @@ final class MiiChannelView extends View {
         plaza = new MiiPlaza(this, ui, art);
         boolean sound = context.getResources().getBoolean(R.bool.wii_sounds);
         audio = new MiiAudio(sound);
-        music = new WiiMusic(context, sound, 40, () -> audio.setMusic(true));
+        // The Plaza's music sits under its effects, at 40 % of the level set for the menu music.
+        int musicVolume = Math.max(0, Math.min(100, context.getResources().getInteger(R.integer.wii_music_volume)));
+        music = new WiiMusic(context, context.getResources().getBoolean(R.bool.wii_music), 40 * musicVolume / 100,
+                () -> audio.setMusic(true));
         music.setTrack(R.raw.wii_music_plaza);
         audio.setMusic(!music.hasTrack());
         sounds = new WiiSounds(context, sound,

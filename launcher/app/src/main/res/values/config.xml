@@ -183,7 +183,8 @@
     <bool name="wii_sounds">true</bool>
     <!-- A single hover cue after staying on a channel. 0 disables it. -->
     <integer name="wii_hover_delay_ms">500</integer>
-    <!-- Bundled menu music; optional files installed with tools/music/add.py override it. -->
+    <!-- Music in the menu, the Mii Plaza and the editor. Files installed with tools/music/add.py replace the
+         menu's. -->
     <bool name="wii_music">true</bool>
     <!-- Music level in percent: 0 to 100 for bundled music; external WAVs allow up to 200. -->
     <integer name="wii_music_volume">100</integer>

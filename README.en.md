@@ -112,8 +112,8 @@ Change what you like and run `launcher/build-and-install.sh` again.
 | Apps that never get a channel | `hidden_apps`, same file |
 | Left button text | `wii_settings_label` (default `wiiOS`) |
 | Sounds on or off | `wii_sounds` |
-| Menu music on or off | `wii_music` |
-| Music volume | `wii_music_volume`, in percent of the file's own level (default 100) |
+| Music on or off (menu, Mii Plaza and editor) | `wii_music` |
+| Music volume | `wii_music_volume`, in percent of the file's own level (default 100); the Plaza and the editor play at 40 % of it |
 | Live TV app in the inputs list | `live_tv_package` |
 | Notice screen text | `wii_intro_title`, `wii_intro_body`, `wii_intro_continue` in `res/values*/strings.xml` |
 | Bundled audio | `launcher/app/src/main/res/raw/`; see `tools/sounds/README.md`. The legacy generator writes alternatives to `tools/sounds/build/`. |
