@@ -21,6 +21,8 @@ import java.util.Map;
  * With home_key_takeover (Google TV with the stock launcher left enabled, which outranks any other home app),
  * it takes KEYCODE_HOME as well: a press opens this launcher and a long press does what the stock one did with it,
  * home_long_press_action. While the stock home's channel has Home (WiiMenuActivity.stockMode), Home passes through.
+ * It also answers the star button (star_keycode) while the menu is in front: Google TV sends that key to its own
+ * launcher, which opens the Home panel over other apps but does nothing over this one.
  *
  * Enable over adb:
  *   settings put secure enabled_accessibility_services com.gathin.tvhome/.HomeKeyService
@@ -35,6 +37,7 @@ public class HomeKeyService extends AccessibilityService {
     /** app_keys, the same map InputKeyService reads, for setups that run only this service. */
     private Map<Integer, String> appKeys = Collections.emptyMap();
     private boolean homeTakeover;
+    private int starKeycode;
     private String homeLongPress = "";
     private final Handler handler = new Handler(Looper.getMainLooper());
     /** Home is down and taken; the long press already fired, so its release opens nothing. */
@@ -60,6 +63,18 @@ public class HomeKeyService extends AccessibilityService {
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
         homeTakeover = getResources().getBoolean(R.bool.home_key_takeover);
         homeLongPress = getString(R.string.home_long_press_action);
+        starKeycode = getResources().getInteger(R.integer.star_keycode);
+    }
+
+    private void openHomePanel() {
+        String action = getString(R.string.home_panel_action);
+        if (action.isEmpty()) return;
+        try {
+            startActivity(new Intent(action).setPackage(getString(R.string.home_panel_package))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (ActivityNotFoundException | SecurityException e) {
+            // No Home panel on this box.
+        }
     }
 
     private boolean onHomeKey(KeyEvent event) {
@@ -111,6 +126,10 @@ public class HomeKeyService extends AccessibilityService {
             return true;
         }
         if (homeTakeover && event.getKeyCode() == KeyEvent.KEYCODE_HOME) return onHomeKey(event);
+        if (starKeycode != 0 && event.getKeyCode() == starKeycode && WiiMenuActivity.onScreen) {
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) openHomePanel();
+            return true;
+        }
         if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
         if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) openHome();
         return true;

@@ -6,6 +6,7 @@ package com.gathin.tvhome;
  * so it runs off the UI thread; WiiMenuView wraps the arrays in bitmaps.
  *
  * Coordinates are pixels of the 1920 x 1080 reference ("ref px"); s converts them to screen pixels.
+ * Every layer is worked out in the console's greys and then recoloured for the theme (WiiTheme.map).
  */
 final class WiiBase {
     private WiiBase() {}
@@ -112,7 +113,17 @@ final class WiiBase {
         return delta;
     }
 
-    static int[] backdrop(int w, int h) {
+    // Greys of the reference capture that the theme's colours are pinned to.
+    private static final float BG_GREY = 236f, STRIPE_GREY = 246f;
+    private static final float PANEL_TOP_GREY = 178f, PANEL_LOW_GREY = 200f;
+    private static final float BODY_DARK_GREY = 200f, BODY_LIGHT_GREY = 240f;
+    private static final float SLOT_DARK_GREY = 0xCF, SLOT_LIGHT_GREY = 0xDF;
+
+    static int[] backdrop(int w, int h, WiiTheme theme) {
+        boolean classic = theme.isClassic();
+        int lineR = classic ? LINE_R : (theme.accent >> 16) & 255;
+        int lineG = classic ? LINE_G : (theme.accent >> 8) & 255;
+        int lineB = classic ? LINE_B : theme.accent & 255;
         float s = w / 1920f;
         int[] out = new int[w * h];
         float[] colLine = new float[w], colCos = new float[w], colBase = new float[w], colAmp = new float[w];
@@ -148,19 +159,31 @@ final class WiiBase {
                 if (dp < 0f) {
                     float hd = dp - HIGHLIGHT_D;
                     float v = colBase[x] + colAmp[x] * k + HIGHLIGHT_AMP * (float) Math.exp(-hd * hd / (2f * HIGHLIGHT_SIGMA * HIGHLIGHT_SIGMA));
-                    r = g = b = v;
+                    if (classic) {
+                        r = g = b = v;
+                    } else {
+                        int c = WiiTheme.map(v, BG_GREY, theme.bg, STRIPE_GREY, theme.stripe);
+                        r = (c >> 16) & 255;
+                        g = (c >> 8) & 255;
+                        b = c & 255;
+                    }
                 } else {
                     int c = panel(colXm[x], dY);
                     float dl = socketDelta(colXm[x], ry, colRight[x]);
+                    if (!classic) {
+                        float grey = (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)) / 3f + dl;
+                        c = WiiTheme.map(grey, PANEL_TOP_GREY, theme.panel, PANEL_LOW_GREY, theme.panel2);
+                        dl = 0f;
+                    }
                     r = ((c >> 16) & 255) + dl;
                     g = ((c >> 8) & 255) + dl;
                     b = (c & 255) + dl;
                 }
                 float cov = clamp01((LINE_HALF - Math.abs(dp)) * s + 0.5f);
                 if (cov > 0f) {
-                    r += (LINE_R - r) * cov;
-                    g += (LINE_G - g) * cov;
-                    b += (LINE_B - b) * cov;
+                    r += (lineR - r) * cov;
+                    g += (lineG - g) * cov;
+                    b += (lineB - b) * cov;
                 }
                 out[row + x] = 0xFF000000 | (clamp255(r) << 16) | (clamp255(g) << 8) | clamp255(b);
             }
@@ -172,7 +195,11 @@ final class WiiBase {
      * One round button's body and blue ring, centred in a size x size square (size in screen px), transparent
      * outside the ring. Lit from the upper left with a soft gloss, as both buttons are.
      */
-    static int[] button(int size, float s) {
+    static int[] button(int size, float s, WiiTheme theme) {
+        boolean classic = theme.isClassic();
+        int ringR = classic ? 0x4D : (theme.accent >> 16) & 255;
+        int ringG = classic ? 0xBD : (theme.accent >> 8) & 255;
+        int ringB = classic ? 0xE3 : theme.accent & 255;
         int[] out = new int[size * size];
         float c = size / 2f;
         for (int y = 0; y < size; y++) {
@@ -188,10 +215,16 @@ final class WiiBase {
                         + k[6] * nx * nx * nx + k[7] * ny * ny * ny + k[8] * nx * nx * ny + k[9] * nx * ny * ny
                         + k[10] * r2 * r2 + k[11] * r2 * r2 * r2;
                 float cr = v, cg = v, cb = v;
+                if (!classic) {
+                    int body = WiiTheme.map(v, BODY_DARK_GREY, theme.panel2, BODY_LIGHT_GREY, theme.btn);
+                    cr = (body >> 16) & 255;
+                    cg = (body >> 8) & 255;
+                    cb = body & 255;
+                }
                 float ring = clamp01((BTN_RING_HALF - Math.abs(r - BTN_RING)) * s + 0.5f);
-                cr += (0x4D - cr) * ring;
-                cg += (0xBD - cg) * ring;
-                cb += (0xE3 - cb) * ring;
+                cr += (ringR - cr) * ring;
+                cg += (ringG - cg) * ring;
+                cb += (ringB - cb) * ring;
                 int a = Math.round(outer * 255f);
                 out[y * size + x] = (a << 24) | (clamp255(cr) << 16) | (clamp255(cg) << 8) | clamp255(cb);
             }
@@ -200,7 +233,8 @@ final class WiiBase {
     }
 
     /** The frosted grey an empty channel slot shows: darker at the top, faint horizontal grain. */
-    static int[] emptySlot(int tw, int th, float s) {
+    static int[] emptySlot(int tw, int th, float s, WiiTheme theme) {
+        boolean classic = theme.isClassic();
         int[] out = new int[tw * th];
         for (int y = 0; y < th; y++) {
             float t = y / (float) Math.max(1, th - 1);
@@ -210,8 +244,13 @@ final class WiiBase {
             for (int x = 0; x < tw; x++) {
                 int rx = (int) (x / s);
                 float n = ((hash(rx, ry) & 255) / 255f - 0.5f) * 5f;
-                int v = clamp255(base + streak + n);
-                out[y * tw + x] = 0xFF000000 | (v << 16) | (v << 8) | v;
+                float grey = base + streak + n;
+                if (classic) {
+                    int v = clamp255(grey);
+                    out[y * tw + x] = 0xFF000000 | (v << 16) | (v << 8) | v;
+                } else {
+                    out[y * tw + x] = WiiTheme.map(grey, SLOT_DARK_GREY, theme.tileBorder, SLOT_LIGHT_GREY, theme.tileFill);
+                }
             }
         }
         return out;

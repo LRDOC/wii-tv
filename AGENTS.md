@@ -23,7 +23,16 @@ Keys injected with `adb shell input` never reach accessibility services, so Home
 ## Fork config (`launcher/app/src/main/res/values/config.xml`)
 `games_channel` false, `wii_sd_button` false (no media player), `home_panel_action`/`home_panel_package` (envelope →
 Google Home panel, the same intent the star button sends), `stock_home_component`/`stock_home_label`,
-`home_key_takeover`, `home_long_press_action`.
+`home_key_takeover`, `home_long_press_action`, `star_keycode` (313 = the remote's star; HomeKeyService opens the Home
+panel while the menu is in front, because launcherx ignores it there), `colors_channel`.
+
+## Themes
+`WiiTheme` holds the 20 palettes (15 light, 5 dark; `WiiThemeTest` checks text contrast ≥ 4.5:1). `WiiBase` still
+computes the console's greys and recolours them with `WiiTheme.map`, so CLASSIC is pixel-identical to upstream. The
+Colors channel (`ColorsBanner` tile) opens a swatch strip in `WiiMenuView` (`openColors`): arrows preview live, OK saves
+(SharedPreferences `wii_theme`), Back restores. Tile pictures that draw their own background implement
+`WiiMenuView.Themed` (MiiBanner, ColorsBanner). The computed backdrop layers are cached as PNGs in
+`cacheDir/wii-base` (bump `BASE_CACHE_VERSION` when WiiBase's drawing changes) so a cold start shows the panel at once.
 
 ## Build
 JDK 17 (`~/vendor/jdk-17`) and the SDK in `~/vendor/android-sdk` (platforms;android-34, build-tools;34.0.0); adb in
@@ -31,5 +40,5 @@ JDK 17 (`~/vendor/jdk-17`) and the SDK in `~/vendor/android-sdk` (platforms;andr
 
 ## Roadmap
 - Phase 1 (done 2026-10-23): the above.
-- Phase 2 (Tel, needs its own plan first): 15 light colour themes (tinted backgrounds: light pink, light purple, …)
-  and 5 dark modes, text colour adjusted per theme for contrast, chosen on the TV, persisted across power cycles.
+- Phase 2 (done 2026-10-23, by Claude Code at Liam's request rather than Tel): the themes above. Design preview:
+  https://claude.ai/artifact/U92okk9wPE5uZ1aijfZ6LC

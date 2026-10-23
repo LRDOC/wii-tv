@@ -204,10 +204,17 @@
          channel. -->
     <string name="stock_home_component" translatable="false">com.google.android.apps.tv.launcherx/.home.HomeActivity</string>
     <string name="stock_home_label" translatable="false">Google TV</string>
+    <!-- The Colors channel after Google TV: 15 light themes and 5 dark modes for this menu (WiiTheme), kept across
+         power-off. -->
+    <bool name="colors_channel">true</bool>
     <!-- HomeKeyService (HOME_KEY_SERVICE=1) also takes the Home button. Needed on Google TV with the stock launcher
          left enabled: it outranks any other home app, so Android sends Home to it whatever the default is. -->
     <bool name="home_key_takeover">true</bool>
     <!-- What a long press on Home opens while HomeKeyService has the button; Google TV's own home opened its side
          panel (dashboard). Empty: nothing. -->
     <string name="home_long_press_action" translatable="false">android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL</string>
+    <!-- The remote's star button (Google TV Streamer remote: KEYCODE_MACRO_1, 313). Google TV opens the Home panel
+         with it over other apps but not over this menu, so HomeKeyService opens home_panel_action itself while the
+         menu is in front. 0: leave the button alone. -->
+    <integer name="star_keycode">313</integer>
 </resources>

@@ -4,6 +4,7 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.CornerPathEffect;
@@ -28,6 +29,9 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -53,6 +57,11 @@ public class WiiMenuView extends View {
         boolean animating();
     }
 
+    /** A tile picture drawn in the menu's colours; told whenever the theme changes. */
+    interface Themed {
+        void setTheme(WiiTheme theme);
+    }
+
     interface Listener {
         void onChannel(Channel channel);
         /** A channel picked up with a held OK was put down somewhere else; the channel keys in their new order. */
@@ -62,6 +71,8 @@ public class WiiMenuView extends View {
         void onInputsButton();
         /** The welcome screen started to leave: the menu is coming up, as after power-on. */
         void onIntroDismissed();
+        /** OK in the Colors strip: this theme is the menu's now and should be kept. */
+        void onThemeChosen(WiiTheme theme);
     }
 
     static final class Channel {
@@ -106,7 +117,7 @@ public class WiiMenuView extends View {
     // What a frame draws, in drawing order.
     private static final int IT_BASE = 0, IT_TILE = 1, IT_ARROW_R = 2, IT_ARROW_L = 3, IT_BTN_L = 4, IT_BTN_R = 5,
             IT_SD = 6, IT_DIGITS = 7, IT_COLON = 8, IT_AMPM = 9, IT_DATE = 10, IT_HAND = 11, IT_MENU = 12,
-            IT_INTRO = 13;
+            IT_INTRO = 13, IT_COLORS = 14;
 
     // Channel frames: the box through the corner arcs' ends; the sides bow out by TILE_BULGE in the middle.
     private static final float TILE_X0 = 163f;
@@ -119,7 +130,6 @@ public class WiiMenuView extends View {
     private static final float TILE_R = 25f;
     private static final float TILE_BULGE = 3f;
     private static final float TILE_BORDER = 4.5f;
-    private static final int TILE_BORDER_COLOR = 0xFFB5B5B5;
     /** A channel picked up to move it is drawn this much bigger, over a shadow this many ref px down and right. */
     private static final float CARRY_SCALE = 1.05f;
     private static final float CARRY_SHADOW = 6f;
@@ -156,13 +166,10 @@ public class WiiMenuView extends View {
     private static final float DATE_EXTRA_SPACE = 3f;
     private static final float DATE_BASE = 981f;
     private static final float DATE_CAP = 55f;
-    private static final int CLOCK_COLOR = 0xFF9A9A9A;
-    private static final int DATE_COLOR = 0xFF7C7C7C;
     /** Fingertip of the hand in the reference capture. */
     private static final float HAND_REF_X = 1072f;
     private static final float HAND_REF_Y = 894f;
 
-    private static final int BLUE = 0xFF3FC0EC;
     /** Segment bits a-g per digit; the original's 7 keeps the upper-left bar. */
     private static final int[] SEGMENTS = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x27, 0x7F, 0x6F};
     /** The segment bits in the order digitSegs holds and draws them: a, d, f, b, e, c, g. */
@@ -188,6 +195,13 @@ public class WiiMenuView extends View {
     private String settingsLabel = "wiiOS";
     /** The SD card button between the round ones; off on boxes with no media player behind it. */
     private boolean sdButton = true;
+    private WiiTheme theme = WiiTheme.CLASSIC;
+    /** The Colors strip: open, how far it has faded in, the focused swatch and the theme to go back to on Back. */
+    private boolean colorsOpen;
+    private float colorsAlpha;
+    private int colorsFocus;
+    private WiiTheme colorsBefore = WiiTheme.CLASSIC;
+    private final Path swatchClip = new Path();
     private WiiSounds sounds;
 
     private float introAlpha;
@@ -278,7 +292,7 @@ public class WiiMenuView extends View {
     };
     private final Runnable autoContinue = this::dismissIntro;
     private final Runnable hoverSound = () -> {
-        if (started && hasWindowFocus() && !refPose && !isIntroShowing() && !menuOpen
+        if (started && hasWindowFocus() && !refPose && !isIntroShowing() && !menuOpen && !colorsOpen
                 && !carrying && !okHeld
                 && focus >= 0 && focus < channels.size()) sound(WiiSounds.WOOP);
     };
@@ -286,7 +300,7 @@ public class WiiMenuView extends View {
     private void scheduleHoverSound() {
         removeCallbacks(hoverSound);
         int delay = getResources().getInteger(R.integer.wii_hover_delay_ms);
-        if (delay > 0 && started && !refPose && !isIntroShowing() && !menuOpen
+        if (delay > 0 && started && !refPose && !isIntroShowing() && !menuOpen && !colorsOpen
                 && !carrying && !okHeld
                 && focus >= 0 && focus < channels.size()) postDelayed(hoverSound, delay);
     }
@@ -343,6 +357,7 @@ public class WiiMenuView extends View {
         orderBefore = null;
         channels.clear();
         channels.addAll(list);
+        for (Channel c : channels) if (c.banner instanceof Themed) ((Themed) c.banner).setTheme(theme);
         pages = Math.max(MIN_PAGES, (channels.size() + SLOTS_PER_PAGE - 1) / SLOTS_PER_PAGE);
         int n = pages * SLOTS_PER_PAGE + 3;
         if (lift.length != n) lift = new float[n];
@@ -366,6 +381,74 @@ public class WiiMenuView extends View {
     void setSettingsLabel(String label) {
         settingsLabel = label;
         rebuild();
+    }
+
+    /** Recolours the menu; the backdrop's pixels are worked out again off the UI thread. */
+    void setTheme(WiiTheme t) {
+        if (t == null || t == theme) return;
+        theme = t;
+        for (Channel c : channels) {
+            c.art = null;
+            c.shader = null;
+            if (c.banner instanceof Themed) ((Themed) c.banner).setTheme(t);
+        }
+        menuShaders = null;
+        introBody = null;
+        if (w > 1) buildArrowBody();
+        stillGen++;
+        rebuild();
+        invalidate();
+    }
+
+    WiiTheme theme() {
+        return theme;
+    }
+
+    private final Runnable colorsPreview = () -> setTheme(WiiTheme.ALL.get(colorsFocus));
+
+    /** The Colors channel: a strip of swatches over the top of the menu, which shows each one as it is focused. */
+    void openColors() {
+        removeCallbacks(hoverSound);
+        colorsBefore = theme;
+        colorsFocus = Math.max(0, WiiTheme.ALL.indexOf(theme));
+        colorsOpen = true;
+        invalidate();
+    }
+
+    private void closeColors(boolean keep) {
+        removeCallbacks(colorsPreview);
+        colorsOpen = false;
+        if (keep) {
+            setTheme(WiiTheme.ALL.get(colorsFocus));
+            listener.onThemeChosen(theme);
+        } else {
+            setTheme(colorsBefore);
+        }
+        scheduleHoverSound();
+        invalidate();
+    }
+
+    private boolean colorsKey(int keyCode) {
+        int dx = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
+        if (dx != 0) {
+            int next = colorsFocus + dx;
+            if (next >= 0 && next < WiiTheme.ALL.size()) {
+                colorsFocus = next;
+                sound(WiiSounds.MOVE);
+                // Holding an arrow runs through several swatches; only the one it stops on is worked out.
+                removeCallbacks(colorsPreview);
+                postDelayed(colorsPreview, 160);
+                invalidate();
+            }
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
+        if (isOk(keyCode)) {
+            sound(WiiSounds.SELECT);
+            closeColors(true);
+            return true;
+        }
+        return false;
     }
 
     void setSdButton(boolean on) {
@@ -417,6 +500,8 @@ public class WiiMenuView extends View {
     void playIntro() {
         if (refPose) return;
         removeCallbacks(hoverSound);
+        if (colorsOpen) closeColors(false);
+        colorsAlpha = 0f;
         menuOpen = false;
         menuAlpha = 0f;
         introAlpha = 1f;
@@ -474,6 +559,11 @@ public class WiiMenuView extends View {
             closeMenu();
             return true;
         }
+        if (colorsOpen) {
+            sound(WiiSounds.BACK);
+            closeColors(false);
+            return true;
+        }
         return false;
     }
 
@@ -485,6 +575,10 @@ public class WiiMenuView extends View {
         }
         if (menuOpen) {
             closeMenu();
+            return;
+        }
+        if (colorsOpen) {
+            closeColors(false);
             return;
         }
         if (refPose || introAlpha > 0f) return;
@@ -553,6 +647,7 @@ public class WiiMenuView extends View {
             return true;
         }
         if (menuOpen) return menuKey(keyCode);
+        if (colorsOpen) return colorsKey(keyCode);
         if (carrying) return carryKey(keyCode, event.getRepeatCount());
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -593,7 +688,7 @@ public class WiiMenuView extends View {
         if (!isOk(keyCode) || !okHeld) return false;
         okHeld = false;
         removeCallbacks(okHeldLong);
-        if (!carrying && !menuOpen && introAlpha <= 0f) activate();
+        if (!carrying && !menuOpen && !colorsOpen && introAlpha <= 0f) activate();
         return true;
     }
 
@@ -866,9 +961,7 @@ public class WiiMenuView extends View {
         tileOutside = new Path(tilePath);
         tileOutside.setFillType(Path.FillType.INVERSE_WINDING);
         arrowRound = rounded(buildArrow(), new CornerPathEffect(7f * s));
-        arrowBody = new LinearGradient(0f, (ARROW_T - ARROW_Y) * s, 0f, (ARROW_B - ARROW_Y) * s,
-                new int[] {0xFF6FCDF3, 0xFFA9E6FB, 0xFFDDF8FF, 0xFF9FE0F8, 0xFF62C5F0},
-                new float[] {0f, 0.35f, 0.5f, 0.62f, 1f}, Shader.TileMode.CLAMP);
+        buildArrowBody();
         arrowShine = new LinearGradient((ARROW_L - ARROW_TIP) * s, 0f, 0f, 0f, 0x66FFFFFF, 0x00FFFFFF,
                 Shader.TileMode.CLAMP);
         digitSegs = buildDigits(new CornerPathEffect(2.5f * s));
@@ -894,33 +987,85 @@ public class WiiMenuView extends View {
         final int bw = w, bh = h;
         final float bs = s;
         final String label = settingsLabel;
+        final WiiTheme th = theme;
+        // The layers take a moment to work out, and until then the menu has no backdrop, panel or round buttons.
+        // The last ones made for this theme, size and label are kept as files, so a start reads them straight away.
+        final String key = BASE_CACHE_VERSION + "-" + th.id + "-" + bw + "x" + bh + "-" + Integer.toHexString(label.hashCode());
+        Bitmap[] cached = readBaseCache(key);
+        if (cached != null) {
+            useBase(cached[0], cached[1], cached[2], cached[3]);
+            return;
+        }
         new Thread(() -> {
-            int[] px = WiiBase.backdrop(bw, bh);
+            int[] px = WiiBase.backdrop(bw, bh, th);
             Bitmap bg = Bitmap.createBitmap(px, bw, bh, Bitmap.Config.ARGB_8888);
             int size = (int) Math.ceil(2f * (WiiBase.BTN_RING + WiiBase.BTN_RING_HALF + 2f) * bs);
-            int[] bp = WiiBase.button(size, bs);
+            int[] bp = WiiBase.button(size, bs, th);
             Bitmap left = Bitmap.createBitmap(bp, size, size, Bitmap.Config.ARGB_8888).copy(Bitmap.Config.ARGB_8888, true);
             Bitmap right = left.copy(Bitmap.Config.ARGB_8888, true);
-            drawWordmark(new Canvas(left), size, bs, label);
-            drawEnvelope(new Canvas(right), size, bs);
-            int tw = Math.round(TILE_W * bs) + 8, th = Math.round(TILE_H * bs) + 8;
-            Bitmap empty = Bitmap.createBitmap(WiiBase.emptySlot(tw, th, bs), tw, th, Bitmap.Config.ARGB_8888);
+            drawWordmark(new Canvas(left), size, bs, label, th);
+            drawEnvelope(new Canvas(right), size, bs, th);
+            int tw = Math.round(TILE_W * bs) + 8, thh = Math.round(TILE_H * bs) + 8;
+            Bitmap empty = Bitmap.createBitmap(WiiBase.emptySlot(tw, thh, bs, th), tw, thh, Bitmap.Config.ARGB_8888);
             post(() -> {
                 if (gen != buildGen) return;
-                base = bg;
-                btnLeft = left;
-                btnRight = right;
-                emptyArt = empty;
-                emptyShader = new BitmapShader(empty, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                baseShader = new BitmapShader(bg, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                underShader = new BitmapShader(bg, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                stillGen++;
-                invalidate();
+                useBase(bg, left, right, empty);
             });
+            writeBaseCache(key, bg, left, right, empty);
         }, "wii-base").start();
     }
 
-    private void drawWordmark(Canvas c, int size, float bs, String label) {
+    private void useBase(Bitmap bg, Bitmap left, Bitmap right, Bitmap empty) {
+        base = bg;
+        btnLeft = left;
+        btnRight = right;
+        emptyArt = empty;
+        emptyShader = new BitmapShader(empty, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        baseShader = new BitmapShader(bg, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        underShader = new BitmapShader(bg, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        stillGen++;
+        invalidate();
+    }
+
+    /** Bump when WiiBase draws differently, so files made by an older build are not used. */
+    private static final int BASE_CACHE_VERSION = 1;
+    private static final String[] BASE_PARTS = {"bg", "left", "right", "empty"};
+
+    private File baseCacheDir() {
+        return new File(getContext().getCacheDir(), "wii-base");
+    }
+
+    private Bitmap[] readBaseCache(String key) {
+        Bitmap[] out = new Bitmap[BASE_PARTS.length];
+        for (int i = 0; i < out.length; i++) {
+            File f = new File(baseCacheDir(), key + "-" + BASE_PARTS[i] + ".png");
+            if (!f.isFile()) return null;
+            out[i] = BitmapFactory.decodeFile(f.getPath());
+            if (out[i] == null) return null;
+        }
+        return out;
+    }
+
+    /** Off the UI thread. Keeps one set: the files of other themes or sizes go, so the folder stays a few MB. */
+    private void writeBaseCache(String key, Bitmap... parts) {
+        File dir = baseCacheDir();
+        if (!dir.isDirectory() && !dir.mkdirs()) return;
+        File[] old = dir.listFiles();
+        if (old != null) for (File f : old) if (!f.getName().startsWith(key + "-")) f.delete();
+        for (int i = 0; i < parts.length; i++) {
+            File f = new File(dir, key + "-" + BASE_PARTS[i] + ".png");
+            File tmp = new File(dir, f.getName() + ".tmp");
+            try (FileOutputStream out = new FileOutputStream(tmp)) {
+                parts[i].compress(Bitmap.CompressFormat.PNG, 100, out);
+            } catch (IOException e) {
+                tmp.delete();
+                return;
+            }
+            if (!tmp.renameTo(f)) tmp.delete();
+        }
+    }
+
+    private void drawWordmark(Canvas c, int size, float bs, String label, WiiTheme th) {
         TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         tp.setTypeface(sansBold);
         tp.setTextAlign(Paint.Align.CENTER);
@@ -929,28 +1074,38 @@ public class WiiMenuView extends View {
         float tw = tp.measureText(label);
         if (tw > maxW) tp.setTextSize(52f * bs * maxW / tw);
         float y = size / 2f + 17f * bs;
-        tp.setColor(0x99FFFFFF);
+        tp.setColor(th.dark ? 0x66000000 : 0x99FFFFFF);
         c.drawText(label, size / 2f, y + 2f * bs, tp);
-        tp.setColor(0xFFA4A4A4);
+        tp.setColor(th.wordmark);
         c.drawText(label, size / 2f, y, tp);
     }
 
-    private void drawEnvelope(Canvas c, int size, float bs) {
+    private void drawEnvelope(Canvas c, int size, float bs, WiiTheme th) {
         float cx = size / 2f, cy = size / 2f;
         float ew = 97f * bs, eh = 65f * bs;
         RectF r = new RectF(cx - ew / 2f, cy - eh / 2f, cx + ew / 2f, cy + eh / 2f);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(0xFF939393);
+        p.setColor(th.envelope);
         c.drawRoundRect(r, 5f * bs, 5f * bs, p);
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(4.5f * bs);
         p.setStrokeJoin(Paint.Join.ROUND);
-        p.setColor(0xFFE2E2E2);
+        p.setColor(th.envelopeFlap);
         Path v = new Path();
         v.moveTo(r.left + 2f * bs, r.top + 14f * bs);
         v.lineTo(cx, r.top + 38f * bs);
         v.lineTo(r.right - 2f * bs, r.top + 14f * bs);
         c.drawPath(v, p);
+    }
+
+    /** The page arrows' glassy fill: the console's blues, or the theme's accent lightened the same way. */
+    private void buildArrowBody() {
+        int a = theme.accent;
+        int[] colors = theme.isClassic() ? new int[] {0xFF6FCDF3, 0xFFA9E6FB, 0xFFDDF8FF, 0xFF9FE0F8, 0xFF62C5F0}
+                : new int[] {WiiTheme.blend(a, 0xFFFFFFFF, 0.3f), WiiTheme.blend(a, 0xFFFFFFFF, 0.6f),
+                        WiiTheme.blend(a, 0xFFFFFFFF, 0.88f), WiiTheme.blend(a, 0xFFFFFFFF, 0.55f), WiiTheme.blend(a, 0xFFFFFFFF, 0.2f)};
+        arrowBody = new LinearGradient(0f, (ARROW_T - ARROW_Y) * s, 0f, (ARROW_B - ARROW_Y) * s, colors,
+                new float[] {0f, 0.35f, 0.5f, 0.62f, 1f}, Shader.TileMode.CLAMP);
     }
 
     /** A channel frame: rounded corners joined by sides that bow out by b in the middle. */
@@ -1089,6 +1244,9 @@ public class WiiMenuView extends View {
         float mt = menuOpen ? 1f : 0f;
         menuAlpha = approach(menuAlpha, mt, kMenu, 0.004f);
         if (menuAlpha != mt) moving = true;
+        float ct = colorsOpen ? 1f : 0f;
+        colorsAlpha = approach(colorsAlpha, ct, kMenu, 0.004f);
+        if (colorsAlpha != ct) moving = true;
         for (int i = 0; i < menuLift.length; i++) {
             float t = menuOpen && i == menuFocus ? 1f : 0f;
             menuLift[i] = approach(menuLift[i], t, kLift, 0.002f);
@@ -1205,6 +1363,7 @@ public class WiiMenuView extends View {
         hand.grabbing = carrying;
         hand.bounds(handX, handY, tmp);
         add(IT_HAND, carrying ? 1 : 0, tmp.left - 2f, tmp.top - 2f, tmp.right + 2f, tmp.bottom + 2f, handMoving);
+        if (colorsAlpha > 0f) add(IT_COLORS, 0, 0f, 0f, w, (STRIP_B + 40f) * s, true);
         if (menuAlpha > 0f) add(IT_MENU, 0, 0f, 0f, w, h, true);
         if (introAlpha > 0f) add(IT_INTRO, 0, 0f, 0f, w, h, true);
     }
@@ -1303,7 +1462,7 @@ public class WiiMenuView extends View {
         switch (itemKind[i]) {
             case IT_BASE:
                 if (base != null) c.drawBitmap(base, 0f, 0f, null);
-                else c.drawColor(0xFFE9E9E9);
+                else c.drawColor(theme.emptyFill);
                 break;
             case IT_TILE: {
                 int sl = itemArg[i];
@@ -1340,6 +1499,9 @@ public class WiiMenuView extends View {
                 break;
             case IT_HAND:
                 hand.draw(c, handX, handY);
+                break;
+            case IT_COLORS:
+                drawColors(c);
                 break;
             case IT_MENU:
                 drawMenu(c);
@@ -1382,7 +1544,7 @@ public class WiiMenuView extends View {
                 under.setShader(underShader);
             } else {
                 under.setShader(null);
-                under.setColor(0xFFE9E9E9);
+                under.setColor(theme.emptyFill);
             }
             c.drawPath(tileOutside, under);
             under.setShader(null);
@@ -1399,17 +1561,17 @@ public class WiiMenuView extends View {
             c.drawPath(tilePath, artPaint);
             artPaint.setShader(null);
         } else {
-            fill.setColor(0xFFD6D6D6);
+            fill.setColor(theme.frame);
             c.drawPath(tilePath, fill);
         }
         if (lf > 0.01f) {
             for (int k = 3; k >= 1; k--) {
-                stroke.setColor(withAlpha(BLUE, (int) (lf * 64 / k)));
+                stroke.setColor(withAlpha(theme.accent, (int) (lf * 64 / k)));
                 stroke.setStrokeWidth((TILE_BORDER + k * 5f) * s);
                 c.drawPath(tilePath, stroke);
             }
         }
-        stroke.setColor(blend(TILE_BORDER_COLOR, BLUE, lf));
+        stroke.setColor(blend(theme.frame, theme.accent, lf));
         stroke.setStrokeWidth((TILE_BORDER + 1.5f * lf) * s);
         c.drawPath(tilePath, stroke);
         c.restoreToCount(save);
@@ -1421,12 +1583,12 @@ public class WiiMenuView extends View {
         if (ch.art != null && ch.art.getWidth() == tw && ch.art.getHeight() == th) return;
         Bitmap bmp = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
         Canvas cv = new Canvas(bmp);
-        cv.drawColor(0xFFFFFFFF);
+        cv.drawColor(theme.plainTop);
         if (ch.banner != null) {
             drawCropped(cv, ch.banner, tw, th);
         } else {
             Paint bg = new Paint();
-            bg.setShader(new LinearGradient(0, 0, 0, th, 0xFFFFFFFF, 0xFFE9E9E9, Shader.TileMode.CLAMP));
+            bg.setShader(new LinearGradient(0, 0, 0, th, theme.plainTop, theme.plainBottom, Shader.TileMode.CLAMP));
             cv.drawRect(0, 0, tw, th, bg);
             if (ch.icon != null) {
                 int size = Math.round(th * 0.46f);
@@ -1437,7 +1599,7 @@ public class WiiMenuView extends View {
             TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
             tp.setTypeface(sansBold);
             tp.setTextSize(th * 0.15f);
-            tp.setColor(0xFF7A7A7A);
+            tp.setColor(theme.label);
             tp.setTextAlign(Paint.Align.CENTER);
             CharSequence label = TextUtils.ellipsize(ch.label, tp, tw * 0.86f, TextUtils.TruncateAt.END);
             cv.drawText(label, 0, label.length(), tw / 2f, th * 0.86f, tp);
@@ -1469,7 +1631,7 @@ public class WiiMenuView extends View {
         fill.setShader(arrowShine);
         c.drawPath(arrowRound, fill);
         fill.setShader(null);
-        stroke.setColor(0xFF2E66C2);
+        stroke.setColor(theme.isClassic() ? 0xFF2E66C2 : WiiTheme.blend(theme.accent, 0xFF000000, 0.35f));
         stroke.setStrokeWidth(3.2f * s);
         c.drawPath(arrowRound, stroke);
         c.restoreToCount(save);
@@ -1485,7 +1647,7 @@ public class WiiMenuView extends View {
         c.drawBitmap(bmp, cx - bmp.getWidth() / 2f, cy - bmp.getHeight() / 2f, bmpPaint);
         if (lf > 0.01f) {
             for (int k = 3; k >= 1; k--) {
-                stroke.setColor(withAlpha(BLUE, (int) (lf * 70 / k)));
+                stroke.setColor(withAlpha(theme.accent, (int) (lf * 70 / k)));
                 stroke.setStrokeWidth((3f + k * 5f) * s);
                 c.drawCircle(cx, cy, WiiBase.BTN_RING * s, stroke);
             }
@@ -1512,7 +1674,7 @@ public class WiiMenuView extends View {
         c.drawRect(366f * s, 975f * s, 422f * s, 987f * s, fill);
         if (lf > 0.01f) {
             for (int k = 3; k >= 1; k--) {
-                stroke.setColor(withAlpha(BLUE, (int) (lf * 80 / k)));
+                stroke.setColor(withAlpha(theme.accent, (int) (lf * 80 / k)));
                 stroke.setStrokeWidth((2f + k * 4f) * s);
                 c.drawPath(sdRound, stroke);
             }
@@ -1572,7 +1734,7 @@ public class WiiMenuView extends View {
         text.setTypeface(sansBold);
         text.setTextSize(DATE_CAP / 0.711f * s);
         text.setTextAlign(Paint.Align.LEFT);
-        text.setColor(DATE_COLOR);
+        text.setColor(theme.date);
         // The original sets its date looser than Roboto: about 2 px more between letters, 3 more at the space.
         text.setLetterSpacing(DATE_TRACKING / (DATE_CAP / 0.711f));
     }
@@ -1590,7 +1752,7 @@ public class WiiMenuView extends View {
     }
 
     private void drawDigits(Canvas c) {
-        fill.setColor(CLOCK_COLOR);
+        fill.setColor(theme.clock);
         if (clockHour >= 10) drawDigit(c, 0, clockHour / 10);
         drawDigit(c, 1, clockHour % 10);
         drawDigit(c, 2, clockMinute / 10);
@@ -1607,7 +1769,7 @@ public class WiiMenuView extends View {
 
     private void drawColon(Canvas c) {
         float d = COLON_DOT / 2f;
-        fill.setColor(CLOCK_COLOR);
+        fill.setColor(theme.clock);
         c.drawRoundRect((COLON_X - d) * s, (COLON_Y1 - d) * s, (COLON_X + d) * s, (COLON_Y1 + d) * s, 2f * s, 2f * s, fill);
         c.drawRoundRect((COLON_X - d) * s, (COLON_Y2 - d) * s, (COLON_X + d) * s, (COLON_Y2 + d) * s, 2f * s, 2f * s, fill);
     }
@@ -1616,7 +1778,7 @@ public class WiiMenuView extends View {
         text.setTypeface(sansBold);
         text.setTextSize(AMPM_CAP / 0.711f * s);
         text.setTextAlign(Paint.Align.LEFT);
-        text.setColor(CLOCK_COLOR);
+        text.setColor(theme.clock);
         // Letter by letter at the original's ink positions and widths; Roboto's M is wider than the original's.
         drawInkLetter(c, clockPm ? "P" : "A", AMPM_X, AMPM_P_W);
         drawInkLetter(c, "M", AMPM_M_X, AMPM_M_W);
@@ -1660,17 +1822,17 @@ public class WiiMenuView extends View {
             c.drawRoundRect(rect, rad, rad, fill);
             fill.setShader(null);
         } else {
-            fill.setColor(0xFFEDEDED);
+            fill.setColor(theme.emptyFill);
             c.drawRoundRect(rect, rad, rad, fill);
         }
-        stroke.setColor(TILE_BORDER_COLOR);
+        stroke.setColor(theme.frame);
         stroke.setStrokeWidth(TILE_BORDER * s);
         c.drawRoundRect(rect, rad, rad, stroke);
 
         text.setTypeface(sansBold);
         text.setTextSize(48f * s);
         text.setTextAlign(Paint.Align.CENTER);
-        text.setColor(DATE_COLOR);
+        text.setColor(theme.date);
         c.drawText(menuTitle, w / 2f, py + 92f * s, text);
 
         text.setTextSize(40f * s);
@@ -1682,7 +1844,7 @@ public class WiiMenuView extends View {
             float ir = itemH / 2f;
             fill.setColor(0xFFFFFFFF);
             if (menuShaders[i] == null) {
-                menuShaders[i] = new LinearGradient(0, tmp.top, 0, tmp.bottom, 0xFFFFFFFF, 0xFFE2E2E2,
+                menuShaders[i] = new LinearGradient(0, tmp.top, 0, tmp.bottom, theme.plainTop, theme.plainBottom,
                         Shader.TileMode.CLAMP);
             }
             fill.setShader(menuShaders[i]);
@@ -1690,15 +1852,15 @@ public class WiiMenuView extends View {
             fill.setShader(null);
             if (lf > 0.01f) {
                 for (int k = 3; k >= 1; k--) {
-                    stroke.setColor(withAlpha(BLUE, (int) (lf * 70 / k)));
+                    stroke.setColor(withAlpha(theme.accent, (int) (lf * 70 / k)));
                     stroke.setStrokeWidth((4f + k * 6f) * s);
                     c.drawRoundRect(tmp, ir, ir, stroke);
                 }
             }
-            stroke.setColor(blend(TILE_BORDER_COLOR, BLUE, lf));
+            stroke.setColor(blend(theme.frame, theme.accent, lf));
             stroke.setStrokeWidth((TILE_BORDER + 2f * lf) * s);
             c.drawRoundRect(tmp, ir, ir, stroke);
-            text.setColor(0xFF666666);
+            text.setColor(theme.label);
             CharSequence label = TextUtils.ellipsize(menuItems.get(i).label, text, tmp.width() - 70f * s,
                     TextUtils.TruncateAt.END);
             c.drawText(label, 0, label.length(), tmp.centerX(), tmp.centerY() + 14f * s, text);
@@ -1706,19 +1868,100 @@ public class WiiMenuView extends View {
         c.restoreToCount(save);
     }
 
+    // The Colors strip, in ref px: a panel across the top row of channels, so the rest of the menu shows the theme.
+    private static final float STRIP_L = 70f, STRIP_R = 1850f, STRIP_T = 22f, STRIP_B = 268f;
+    private static final float SWATCH_D = 66f, SWATCH_PITCH = 82f, SWATCH_GROUP_GAP = 30f, SWATCH_CY = 172f;
+
+    private float swatchX(int i) {
+        int n = WiiTheme.ALL.size(), light = 0;
+        for (WiiTheme t : WiiTheme.ALL) if (!t.dark) light++;
+        float total = n * SWATCH_PITCH - (SWATCH_PITCH - SWATCH_D) + SWATCH_GROUP_GAP;
+        float x0 = WiiBase.CX - total / 2f + SWATCH_D / 2f;
+        return x0 + i * SWATCH_PITCH + (i >= light ? SWATCH_GROUP_GAP : 0f);
+    }
+
+    private void drawColors(Canvas c) {
+        int a = Math.round(colorsAlpha * 255);
+        int save = a < 255 ? c.saveLayerAlpha(0, 0, w, h, a) : c.save();
+        c.translate(0f, (colorsAlpha - 1f) * 30f * s);
+        float rad = 40f * s;
+        rect.set(STRIP_L * s, STRIP_T * s, STRIP_R * s, STRIP_B * s);
+        c.save();
+        c.translate(0f, 6f * s);
+        fill.setColor(0x30000000);
+        c.drawRoundRect(rect, rad, rad, fill);
+        c.restore();
+        fill.setColor(theme.plainTop);
+        c.drawRoundRect(rect, rad, rad, fill);
+        stroke.setColor(theme.frame);
+        stroke.setStrokeWidth(TILE_BORDER * s);
+        c.drawRoundRect(rect, rad, rad, stroke);
+
+        text.setTypeface(sansBold);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(44f * s);
+        text.setColor(theme.date);
+        c.drawText(getResources().getString(R.string.colors_channel_name), (STRIP_L + 44f) * s, (STRIP_T + 70f) * s, text);
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(28f * s);
+        text.setColor(theme.label);
+        c.drawText(getResources().getString(R.string.colors_hint), (STRIP_R - 44f) * s, (STRIP_T + 64f) * s, text);
+
+        float r = SWATCH_D / 2f * s;
+        for (int i = 0; i < WiiTheme.ALL.size(); i++) {
+            WiiTheme t = WiiTheme.ALL.get(i);
+            float cx = swatchX(i) * s, cy = SWATCH_CY * s;
+            boolean focused = i == colorsFocus;
+            if (focused) {
+                for (int k = 3; k >= 1; k--) {
+                    stroke.setColor(withAlpha(theme.accent, 70 / k));
+                    stroke.setStrokeWidth((6f + k * 6f) * s);
+                    c.drawCircle(cx, cy, r + 4f * s, stroke);
+                }
+            }
+            swatchClip.reset();
+            swatchClip.addCircle(cx, cy, r, Path.Direction.CW);
+            int clip = c.save();
+            c.clipPath(swatchClip);
+            fill.setColor(t.bg);
+            c.drawRect(cx - r, cy - r, cx + r, cy + r, fill);
+            // The theme's accent fills the lower right half, as on the swatches in the preview.
+            swatchClip.reset();
+            swatchClip.moveTo(cx + r, cy - r);
+            swatchClip.lineTo(cx + r, cy + r);
+            swatchClip.lineTo(cx - r, cy + r);
+            swatchClip.close();
+            fill.setColor(t.accent);
+            c.drawPath(swatchClip, fill);
+            c.restoreToCount(clip);
+            stroke.setColor(focused ? theme.date : theme.frame);
+            stroke.setStrokeWidth((focused ? 6f : 3f) * s);
+            c.drawCircle(cx, cy, r, stroke);
+        }
+
+        WiiTheme f = WiiTheme.ALL.get(colorsFocus);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(28f * s);
+        text.setColor(theme.date);
+        float half = text.measureText(f.name) / 2f;
+        float nx = Math.max((STRIP_L + 30f) * s + half, Math.min((STRIP_R - 30f) * s - half, swatchX(colorsFocus) * s));
+        c.drawText(f.name, nx, (SWATCH_CY + 78f) * s, text);
+        c.restoreToCount(save);
+    }
+
     private void drawIntro(Canvas c) {
         int a = Math.round(introAlpha * 255);
         int save = a < 255 ? c.saveLayerAlpha(0, 0, w, h, a) : c.save();
-        c.drawColor(0xFFFFFFFF);
+        c.drawColor(theme.notice);
         float left = 240f * s;
         float headY = 340f * s;
         drawWarningSign(c, left + 34f * s, headY - 22f * s, 38f * s);
         text.setTypeface(sansBold);
         text.setTextSize(64f * s);
         text.setTextAlign(Paint.Align.LEFT);
-        text.setColor(0xFF1E1E1E);
+        text.setColor(theme.noticeText);
         c.drawText(introTitle, left + 98f * s, headY, text);
-        stroke.setColor(0xFFDADADA);
+        stroke.setColor(theme.noticeRule);
         stroke.setStrokeWidth(3f * s);
         c.drawLine(left, headY + 40f * s, w - left, headY + 40f * s, stroke);
 
@@ -1726,7 +1969,7 @@ public class WiiMenuView extends View {
             TextPaint body = new TextPaint(Paint.ANTI_ALIAS_FLAG);
             body.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
             body.setTextSize(50f * s);
-            body.setColor(0xFF3A3A3A);
+            body.setColor(theme.noticeText);
             int width = Math.max(1, Math.round(w - 2 * left));
             introBody = StaticLayout.Builder.obtain(introBodyText, 0, introBodyText.length(), body, width)
                     .setAlignment(Layout.Alignment.ALIGN_NORMAL)
@@ -1749,16 +1992,16 @@ public class WiiMenuView extends View {
         float total = 2 * iconR + gapIcon + tw;
         float sx = (w - total) / 2f, baseY = 880f * s;
         float icx = sx + iconR, icy = baseY - 18f * s;
-        fill.setColor(withAlpha(0xFFFFFFFF, ca));
+        fill.setColor(withAlpha(theme.plainTop, ca));
         c.drawCircle(icx, icy, iconR, fill);
-        stroke.setColor(withAlpha(0xFF9A9A9A, ca));
+        stroke.setColor(withAlpha(theme.frame, ca));
         stroke.setStrokeWidth(4.5f * s);
         c.drawCircle(icx, icy, iconR, stroke);
-        text.setColor(withAlpha(0xFF4A4A4A, ca));
+        text.setColor(withAlpha(theme.noticeText, ca));
         c.drawText(introContinue, sx + 2 * iconR + gapIcon, baseY, text);
         text.setTextSize(22f * s);
         text.setTextAlign(Paint.Align.CENTER);
-        text.setColor(withAlpha(0xFF777777, ca));
+        text.setColor(withAlpha(theme.label, ca));
         c.drawText("OK", icx, icy + 8f * s, text);
         c.restoreToCount(save);
     }

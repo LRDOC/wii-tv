@@ -50,6 +50,8 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private static final String HAND_PAGE = "hand_page";
     /** In PREFS: the stock home's channel was chosen, so Home goes there until the screen next goes off. */
     private static final String STOCK_MODE = "stock_mode";
+    /** The menu is the screen in front; HomeKeyService then answers the star button itself (star_keycode). */
+    static volatile boolean onScreen;
 
     private WiiMenuView menu;
     private WiiSounds sounds;
@@ -120,6 +122,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         menu.setSounds(sounds);
         menu.setSettingsLabel(getString(R.string.wii_settings_label));
         menu.setSdButton(getResources().getBoolean(R.bool.wii_sd_button));
+        menu.setTheme(WiiTheme.load(this));
         setContentView(menu);
         menu.requestFocus();
         boolean boot = firstStartThisBoot();
@@ -156,6 +159,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        onScreen = true;
         // On its way to the stock home: no music, no welcome screen, nothing for the moment it shows.
         if (stockMode()) return;
         if (appsDirty || miiStore.version() != miiVersion) reloadApps();
@@ -179,6 +183,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        onScreen = false;
         music.pause();
         fileMusic.stop();
         menu.stop();
@@ -328,7 +333,12 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         channels.add(at, miiChannel());
         if (games) channels.add(++at, gamesChannel());
         WiiMenuView.Channel stock = stockChannel();
-        if (stock != null) channels.add(at + 1, stock);
+        if (stock != null) channels.add(++at, stock);
+        if (getResources().getBoolean(R.bool.colors_channel)) {
+            channels.add(at + 1, new WiiMenuView.Channel(getPackageName() + ".colors",
+                    getString(R.string.colors_channel_name), new ColorsBanner(getString(R.string.colors_banner_word)),
+                    null, null));
+        }
         List<String> usual = new ArrayList<>(channels.size());
         for (WiiMenuView.Channel ch : channels) usual.add(ch.key);
         usualOrder = usual;
@@ -451,8 +461,17 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
     @Override
     public void onChannel(WiiMenuView.Channel channel) {
+        if (channel.key.equals(getPackageName() + ".colors")) {
+            menu.openColors();
+            return;
+        }
         if (channel.key.equals(getPackageName() + ".stock")) setStockMode(true);
         open(channel.intent, true);
+    }
+
+    @Override
+    public void onThemeChosen(WiiTheme theme) {
+        WiiTheme.save(this, theme);
     }
 
     @Override

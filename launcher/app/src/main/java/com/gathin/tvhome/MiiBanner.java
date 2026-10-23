@@ -19,7 +19,7 @@ import java.util.List;
  * The Mii channel's tile in the channel menu. With a pack it is the original's: a crowd of faces bobbing, a white
  * veil and the Mii logo fading in over them, and back. Without one, the plaza's first residents in a row and the name.
  */
-final class MiiBanner extends Drawable implements WiiMenuView.LiveArt {
+final class MiiBanner extends Drawable implements WiiMenuView.LiveArt, WiiMenuView.Themed {
     private static final int MAX_SHOWN = 5;
     /** Seconds in one loop of the original's tile. */
     private static final float LOOP = 10f;
@@ -32,11 +32,21 @@ final class MiiBanner extends Drawable implements WiiMenuView.LiveArt {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bmp = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
     private final RectF dst = new RectF();
+    private WiiTheme theme = WiiTheme.CLASSIC;
 
     MiiBanner(List<Mii> miis, String label, Typeface face) {
         this.miis = miis;
         this.label = label;
         this.face = face;
+    }
+
+    @Override
+    public void setTheme(WiiTheme theme) {
+        this.theme = theme;
+    }
+
+    private int top() {
+        return theme.isClassic() ? 0xFFFFFFFF : theme.plainTop;
     }
 
     private static MiiPack crowdPack() {
@@ -60,7 +70,8 @@ final class MiiBanner extends Drawable implements WiiMenuView.LiveArt {
         float w = b.width(), h = b.height();
         int save = c.save();
         c.translate(b.left, b.top);
-        MiiArt.opaque(paint).setShader(new LinearGradient(0, 0, 0, h, 0xFFFFFFFF, 0xFFE6E6E6, Shader.TileMode.CLAMP));
+        MiiArt.opaque(paint).setShader(new LinearGradient(0, 0, 0, h, top(),
+                theme.isClassic() ? 0xFFE6E6E6 : theme.plainBottom, Shader.TileMode.CLAMP));
         c.drawRect(0, 0, w, h, paint);
         paint.setShader(null);
 
@@ -91,7 +102,7 @@ final class MiiBanner extends Drawable implements WiiMenuView.LiveArt {
         paint.setTypeface(face);
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setTextSize(h * 0.15f);
-        paint.setColor(0xFF8C8C8C);
+        paint.setColor(theme.isClassic() ? 0xFF8C8C8C : theme.label);
         c.drawText(label, w / 2f, h * 0.91f, paint);
         c.restoreToCount(save);
     }
@@ -103,7 +114,7 @@ final class MiiBanner extends Drawable implements WiiMenuView.LiveArt {
         int save = c.save();
         c.translate(b.left, b.top);
         paint.setShader(null);
-        paint.setColor(0xFFFFFFFF);
+        paint.setColor(top());
         c.drawRect(0, 0, w, h, paint);
         bmp.setAlpha(255);
         for (int i = 0; i < p.crowdNames.size(); i++) {
@@ -119,7 +130,7 @@ final class MiiBanner extends Drawable implements WiiMenuView.LiveArt {
         }
         float veil = ease(t, 5.5f, 6.1f) - ease(t, 9.1f, 9.7f);
         if (veil > 0.002f) {
-            paint.setColor(0xFFFFFFFF);
+            paint.setColor(top());
             paint.setAlpha(Math.round(225 * veil));
             c.drawRect(0, 0, w, h, paint);
         }

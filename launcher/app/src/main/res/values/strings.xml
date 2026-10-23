@@ -113,6 +113,9 @@
     <string name="wii_intro_continue">Press OK to continue.</string>
     <!-- Mii channel (MiiChannelActivity): the plaza, the maker and their dialogs. -->
     <string name="mii_channel_name">Mii Channel</string>
+    <string name="colors_channel_name">Colors</string>
+    <string name="colors_banner_word">COLORS</string>
+    <string name="colors_hint">Arrows choose · OK keeps it · Back cancels</string>
     <string name="mii_ok" translatable="false">OK</string>
     <string name="mii_edit_pick">Choose the Mii you want to edit.</string>
     <string name="mii_full">The plaza is full. Delete a Mii to make room for a new one.</string>
