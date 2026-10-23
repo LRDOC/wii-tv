@@ -168,7 +168,20 @@ Al cerrar el aviso suena el arranque, y la música del menú entra un segundo de
 
 Los botones wiiOS, SD y el sobre usan `wii_big_buttons.ogg`. `wii_woop.ogg` suena una sola vez cuando dejás la manito medio segundo sobre un canal; si antes te movés, abrís un panel o salís del menú, no suena. `wii_hover_delay_ms` en `config.xml` cambia la demora, y `0` lo apaga.
 
-Los archivos están en `launcher/app/src/main/res/raw/`: efectos y música OGG Vorbis. Mirá el [mapa de audios y créditos](tools/sounds/README.md). Si cargaste tu propia música con `tools/music/add.py`, suena esa en lugar de la incluida; si la sacás, vuelve la incluida.
+Los archivos están en `launcher/app/src/main/res/raw/`: efectos y música OGG Vorbis. Mirá el [mapa de audios y créditos](tools/sounds/README.md). Para usar tu propia música, mirá [Tu propia música](#tu-propia-música).
+
+### Tu propia música
+
+En lugar de la música incluida, el menú puede tocar la tuya. Cargala con `tools/music/add.py`, que necesita [ffmpeg](https://ffmpeg.org) en la computadora:
+
+```sh
+TV_HOST=192.168.1.50 tools/venv/bin/python tools/music/add.py musica.flac --start arranque.flac --loop 12.5 48
+```
+
+- `--loop INICIO FIN`, en segundos: la música suena hasta FIN y sigue desde INICIO, una y otra vez. El último segundo y medio antes de FIN se funde con lo que suena justo antes de INICIO, así no se nota el salto (`--crossfade` cambia cuánto dura). Sin `--loop` se repite el archivo entero.
+- `--start` es opcional: un sonido de arranque que reemplaza al del menú. La música entra un segundo después, como con la incluida.
+- Lee los formatos que lee ffmpeg (mp3, flac, ogg, m4a, wav) y los guarda en la TV como WAV, en la carpeta de wiiOS. Con `adb` instalado (o `ADB=/ruta/a/adb`), la copia tarda un segundo.
+- `--remove` saca tu música y vuelve la incluida, y `--out carpeta` solo arma los archivos, sin tocar la TV.
 
 ## Personalizar
 
