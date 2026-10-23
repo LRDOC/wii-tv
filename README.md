@@ -14,7 +14,7 @@ English: [README.en.md](README.en.md)
 
 wii-tv es un proyecto de fans. No está afiliado a Nintendo ni tiene su aprobación. "Wii" es una marca de Nintendo.
 
-El repositorio no incluye archivos extraídos de Nintendo. La interfaz se dibuja por código (`WiiMenuView`, `WiiBase`, `WiiPalette`). Los 8 efectos y las 3 pistas musicales incluidos son remakes propios aportados por Soffizlly; ver [audios y créditos](tools/sounds/README.md).
+El repositorio no incluye archivos extraídos de Nintendo. La interfaz se dibuja por código (`WiiMenuView`, `WiiBase`, `WiiPalette`). Los 8 efectos y las 3 músicas que trae son remakes que hizo Soffizlly para este proyecto: ver [audios y créditos](tools/sounds/README.md).
 
 ## Qué trae
 
@@ -28,7 +28,7 @@ El repositorio no incluye archivos extraídos de Nintendo. La interfaz se dibuja
 - **Canal Mii**: el primer canal. La plaza con tus Miis paseando sobre el piso de cuadrados, los botones de los costados (editar, crear, borrar, ayuda, desfile, mensajes), el silbato que los ordena por nombre, favoritos, color o género, y el editor para crearlos y cambiarlos. Los Miis se guardan en la TV. Sin nada más, todo se dibuja por código; con el paquete del canal usa las caras, los pelos, los íconos y los sonidos originales. El repositorio no trae esos archivos: [`tools/miipack`](tools/miipack/README.md) los toma de sus páginas públicas y arma el paquete en tu computadora.
 - **Canal Juegos**: al lado del Canal Mii. Su cartel es una pradera pixelada con un personajito azul que salta piedras y junta gemas. Adentro, tus juegos son cartuchos en un estante: elegís uno, apretás **Jugar** y arranca en [RetroArch](https://www.retroarch.com) con mGBA (Game Boy, Game Boy Color y Game Boy Advance). El botón **RetroArch** abre sus ajustes. Los juegos no vienen con el repositorio: ver [Juegos](#juegos).
 - **Sonidos** al moverte, al abrir algo, al cambiar de página, al abrir las entradas y al continuar desde el aviso. Usan el volumen de la TV.
-- **Audio incluido**: 8 efectos y 3 pistas musicales para el menú, la Plaza Mii y el editor. El arranque suena primero y la música del menú comienza un segundo después. No hay que instalar audios por separado.
+- **Audio incluido**: 8 efectos y 3 músicas, para el menú, la Plaza Mii y el editor. Primero suena el arranque y la música del menú entra un segundo después. No hay que instalar nada aparte.
 - **Pantalla de aviso** al prender la TV. La cierran OK o las flechas, o se va sola a los 12 segundos. No vuelve a aparecer cuando salís de una app.
 - **Siempre arranca en el menú**: al prender la TV vuelve al menú aunque hayas dejado otra app abierta.
 - Protector de pantalla con reloj (opcional).
@@ -162,13 +162,13 @@ Si elegís otro juego, o el botón RetroArch del canal, RetroArch cierra el jueg
 
 ## Audio incluido
 
-El APK ya incluye los 11 remakes de Soffizlly: 8 efectos y 3 pistas musicales. Funcionan desde la instalación, sin descargar archivos ni ejecutar herramientas adicionales.
+El APK trae los 11 remakes de Soffizlly: 8 efectos y 3 músicas. Suenan apenas lo instalás, sin bajar nada más.
 
-Al cerrar el aviso inicial, suena el arranque y la música del menú comienza un segundo después, en bucle. La Plaza Mii y el editor tienen sus propias pistas. La música se pausa al salir de cada pantalla y respeta el foco de audio.
+Al cerrar el aviso suena el arranque, y la música del menú entra un segundo después, en bucle. La Plaza Mii y el editor tienen su propia música. La música se pausa cuando salís de cada pantalla, y espera si otra app está reproduciendo algo.
 
-Los botones wiiOS, SD y el sobre usan `wii_big_buttons.ogg`. El aviso `wii_woop.ogg` suena una sola vez al mantener el cursor 0,5 segundos sobre un canal. Cambiar de canal, abrir un panel o salir del menú cancela la espera. `wii_hover_delay_ms` en `config.xml` cambia la demora; `0` lo desactiva.
+Los botones wiiOS, SD y el sobre usan `wii_big_buttons.ogg`. `wii_woop.ogg` suena una sola vez cuando dejás la manito medio segundo sobre un canal; si antes te movés, abrís un panel o salís del menú, no suena. `wii_hover_delay_ms` en `config.xml` cambia la demora, y `0` lo apaga.
 
-Los archivos están en `launcher/app/src/main/res/raw/`: efectos y música OGG Vorbis. Consulta el [mapa de audios y créditos](tools/sounds/README.md). Si ya tienes música personalizada instalada con la herramienta opcional `tools/music/add.py`, esa música conserva la prioridad; al quitarla vuelve la pista incluida.
+Los archivos están en `launcher/app/src/main/res/raw/`: efectos y música OGG Vorbis. Mirá el [mapa de audios y créditos](tools/sounds/README.md). Si cargaste tu propia música con `tools/music/add.py`, suena esa en lugar de la incluida; si la sacás, vuelve la incluida.
 
 ## Personalizar
 
@@ -229,7 +229,7 @@ TV_HOST=192.168.1.50 tools/venv/bin/python tools/tv.py 'cmd package set-home-act
 - **El botón SD dice "No disponible".** Tu TV no tiene el reproductor de MediaTek; poné el de tu TV en `MEDIA_PLAYER`.
 - **Un juego no arranca.** Fijate que RetroArch tenga el núcleo mGBA (paso 1 de [Juegos](#juegos)) y que el juego aparezca en `tools/games/add.py --list`.
 - **No se escuchan los sonidos.** Suben y bajan con el volumen de la TV. Fijate que `wii_sounds` sea `true`.
-- **No suena la música del menú.** Comprueba que `wii_music` sea `true`, que `wii_music_volume` sea mayor que cero y que el volumen multimedia de la TV esté activo. El APK ya incluye la música. Si otra app reproduce audio en segundo plano, el menú espera a que termine.
+- **No suena la música del menú.** Fijate que `wii_music` sea `true`, que `wii_music_volume` sea mayor que cero y que el volumen de la TV no esté en cero. La música ya viene en el APK. Si otra app está reproduciendo algo en segundo plano, el menú espera a que termine.
 - **`tv.py` no conecta.** La TV y la computadora tienen que estar en la misma red, con la depuración activada, y tenés que aceptar el aviso en la pantalla de la TV.
 
 ## Cómo está hecho
