@@ -7,7 +7,6 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.util.Log;
 
 /** Local music, confined to the screen that owns it; no background service. */
@@ -118,7 +117,6 @@ final class WiiMusic {
                     return true;
                 });
                 jingle.start();
-                Log.i(TAG, "jingle_started uptime=" + SystemClock.uptimeMillis());
             }
         } catch (RuntimeException error) {
             if (jingle != null) jingle.release();
@@ -134,7 +132,6 @@ final class WiiMusic {
         pausePlayer(player);
         if (focused) manager.abandonAudioFocusRequest(focus);
         focused = false;
-        Log.i(TAG, "music_paused track=" + resource + " uptime=" + SystemClock.uptimeMillis());
     }
 
     void release() {
@@ -206,11 +203,7 @@ final class WiiMusic {
         prepareMusic();
         if (player == null) return;
         try {
-            if (!player.isPlaying()) {
-                player.start();
-                Log.i(TAG, "music_started track=" + context.getResources().getResourceEntryName(resource)
-                        + " uptime=" + SystemClock.uptimeMillis());
-            }
+            if (!player.isPlaying()) player.start();
         } catch (RuntimeException error) {
             player.release();
             player = null;
