@@ -26,7 +26,7 @@ El repositorio no incluye archivos extraídos de Nintendo. La interfaz se dibuja
   - **Sobre** (derecha) abre la lista de entradas HDMI y la TV en vivo.
 - **Manito** que sigue al canal o botón elegido. Al volver de una app está donde la dejaste, aunque Android haya cerrado el menú para liberar memoria.
 - **Canal Mii**: el primer canal. La plaza con tus Miis paseando sobre el piso de cuadrados, los botones de los costados (editar, crear, borrar, ayuda, desfile, mensajes), el silbato que los ordena por nombre, favoritos, color o género, y el editor para crearlos y cambiarlos. Los Miis se guardan en la TV. Sin nada más, todo se dibuja por código; con el paquete del canal usa las caras, los pelos, los íconos y los sonidos originales. El repositorio no trae esos archivos: [`tools/miipack`](tools/miipack/README.md) los toma de sus páginas públicas y arma el paquete en tu computadora.
-- **Canal Juegos**: al lado del Canal Mii. Su cartel es una pradera pixelada con un personajito azul que salta piedras y junta gemas. Adentro, tus juegos son cartuchos en un estante: elegís uno, apretás **Jugar** y arranca en [RetroArch](https://www.retroarch.com) con mGBA (Game Boy, Game Boy Color y Game Boy Advance). El botón **RetroArch** abre sus ajustes. Los juegos no vienen con el repositorio: ver [Juegos](#juegos).
+- **Canal Juegos**: al lado del Canal Mii. Su cartel es una pradera pixelada con un personajito azul que salta piedras y junta gemas. Adentro, tus juegos son cartuchos en un estante: elegís uno, apretás **Jugar** y arranca en [RetroArch](https://www.retroarch.com) (Game Boy, Game Boy Color, Game Boy Advance, NES, Super Nintendo y Neo Geo). El botón **RetroArch** abre sus ajustes. Los juegos no vienen con el repositorio: ver [Juegos](#juegos).
 - **Sonidos** al moverte, al abrir algo, al cambiar de página, al abrir las entradas y al continuar desde el aviso. Usan el volumen de la TV.
 - **Audio incluido**: 7 efectos y 3 músicas, para el menú, la Plaza Mii y el editor. Primero suena el arranque y la música del menú entra un segundo después. No hay que instalar nada aparte.
 - **Pantalla de aviso** al prender la TV. La cierran OK o las flechas, o se va sola a los 12 segundos. No vuelve a aparecer cuando salís de una app.
@@ -132,19 +132,33 @@ Mientras la depuración esté activada, cualquier computadora que ya autorizaste
 
 ## Juegos
 
-El canal Juegos arranca tus juegos en RetroArch. Usá solo juegos tuyos: copiá tus propios cartuchos con un lector de cartuchos (por ejemplo GB Operator o GBxCart RW).
+El canal Juegos arranca tus juegos en RetroArch. Usá solo juegos tuyos: copiá tus propios cartuchos con un lector de cartuchos (por ejemplo GB Operator, GBxCart RW o el Open Source Cartridge Reader).
 
-1. **Instalá RetroArch en la TV.** La mayoría de los Android TV son de 32 bits y necesitan `RetroArch_ra32.apk`, de la [página de descargas de RetroArch](https://www.retroarch.com/?page=platforms). Abrilo una vez y bajá el núcleo: Actualizador en línea → Descargar núcleos → Nintendo - Game Boy Advance (mGBA). Salí con Home.
+| Consola | Archivos | Núcleo de RetroArch |
+| --- | --- | --- |
+| Game Boy, Game Boy Color y Game Boy Advance | `.gb`, `.gbc`, `.gba` | Nintendo - Game Boy Advance (mGBA) |
+| NES | `.nes` | Nintendo - NES / Famicom (FCEUmm) |
+| Super Nintendo | `.sfc`, `.smc` | Nintendo - SNES / SFC (Snes9x 2010) |
+| Neo Geo | `.zip` | Arcade (FinalBurn Neo) |
+
+1. **Instalá RetroArch en la TV.** La mayoría de los Android TV son de 32 bits y necesitan `RetroArch_ra32.apk`, de la [página de descargas de RetroArch](https://www.retroarch.com/?page=platforms). Abrilo una vez y bajá los núcleos de tus consolas en Actualizador en línea → Descargar núcleos. Salí con Home.
 2. **Preparalo para el control de la TV** (una sola vez):
    ```sh
    TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py --setup
    ```
    Agrega el mapa de botones de `tools/games/retroarch/` y cambia algunos ajustes de RetroArch: OK elige y Atrás vuelve, mantener el botón rojo abre su menú y el juego se guarda cada 10 segundos. Antes guarda una copia de los ajustes en `retroarch.cfg.before-wii-tv`, en la carpeta de RetroArch de la TV. Si usás un joystick Bluetooth, en RetroArch elegí además Actualizador en línea → Actualizar perfiles de controles.
-3. **Sumá tus juegos** (`.gba`, `.gb` o `.gbc`):
+3. **Sumá tus juegos**:
    ```sh
    TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py "Mi juego.gba" --title "Mi juego"
    ```
    Copia el archivo a `RetroArch/roms/` en la TV y lo pone en el estante. `--color "#E8432E"` elige el color de la etiqueta. `--list` muestra los juegos, y `--remove "Mi juego"` saca uno (con `--delete` también borra el archivo de la TV).
+
+**Neo Geo.** Cada juego es un set `.zip` de FinalBurn Neo (por ejemplo `mslug.zip`) y necesita el BIOS de la Neo Geo, `neogeo.zip`, que wii-tv no trae. Los sets tienen que ser de la versión de FinalBurn Neo que tenés en RetroArch; si no, el juego no arranca.
+
+```sh
+TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py --bios neogeo.zip
+TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py mslug.zip --system neogeo --title "Metal Slug"
+```
 
 Con el control de la TV, durante el juego:
 
@@ -154,11 +168,11 @@ Con el control de la TV, durante el juego:
 | OK | A |
 | Atrás | B |
 | Rojo | Start. Mantenelo 2 segundos para el menú de RetroArch (guardar, cargar o cerrar el juego). |
-| Verde | Select |
-| Amarillo y azul | L y R |
+| Verde | Select. En Neo Geo, moneda. |
+| Amarillo y azul | Y y X. En Game Boy Advance son L y R; en Neo Geo, C y D. |
 | Home | Vuelve al Menú Wii. El juego queda en pausa y sigue si lo elegís otra vez. |
 
-Si elegís otro juego, o el botón RetroArch del canal, RetroArch cierra el juego que estaba abierto. Lo que guardaste dentro del juego llega al archivo en 10 segundos como mucho, así que esperá un momento antes de cambiar de juego. El mapa de botones es para los controles de las TVs Philips (receptor "MStar Smart TV IR Receiver"); con otro control, configuralo en RetroArch → Ajustes → Entrada.
+Los juegos de Super Nintendo que usan L y R necesitan un joystick. Si elegís otro juego, o el botón RetroArch del canal, RetroArch cierra el juego que estaba abierto. Lo que guardaste dentro del juego llega al archivo en 10 segundos como mucho, así que esperá un momento antes de cambiar de juego. El mapa de botones es para los controles de las TVs Philips (receptor "MStar Smart TV IR Receiver"); con otro control, configuralo en RetroArch → Ajustes → Entrada.
 
 ## Audio incluido
 
@@ -240,7 +254,7 @@ TV_HOST=192.168.1.50 tools/venv/bin/python tools/tv.py 'cmd package set-home-act
 - **Home sigue abriendo el launcher viejo.** En Google TV, el asistente de configuración (`com.google.android.tungsten.setupwraith`) también puede reclamar Home. Mirá la [guía de problemas de cleanyourtv](https://github.com/Gathin23/cleanyourtv/blob/main/docs/TROUBLESHOOTING.md) antes de desactivarlo: en algunas TVs es el dueño del Wi-Fi.
 - **Falta una app.** El menú muestra las apps hechas para TV. Fijate que no esté en `hidden_apps`.
 - **El botón SD dice "No disponible".** Tu TV no tiene el reproductor de MediaTek; poné el de tu TV en `MEDIA_PLAYER`.
-- **Un juego no arranca.** Fijate que RetroArch tenga el núcleo mGBA (paso 1 de [Juegos](#juegos)) y que el juego aparezca en `tools/games/add.py --list`.
+- **Un juego no arranca.** Fijate que RetroArch tenga el núcleo de esa consola (paso 1 de [Juegos](#juegos)) y que el juego aparezca en `tools/games/add.py --list`. En Neo Geo, que `neogeo.zip` esté en la TV y que el set sea de tu versión de FinalBurn Neo.
 - **No se escuchan los sonidos.** Suben y bajan con el volumen de la TV. Fijate que `wii_sounds` sea `true`.
 - **No suena la música del menú.** Fijate que `wii_music` sea `true`, que `wii_music_volume` sea mayor que cero y que el volumen de la TV no esté en cero. La música ya viene en el APK. Si otra app está reproduciendo algo en segundo plano, el menú espera a que termine.
 - **`tv.py` no conecta.** La TV y la computadora tienen que estar en la misma red, con la depuración activada, y tenés que aceptar el aviso en la pantalla de la TV.
