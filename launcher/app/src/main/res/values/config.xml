@@ -30,7 +30,7 @@
     </string-array>
 
     <!-- The TV's Live TV / tuner app, offered at the end of the Inputs menu. Leave empty to omit. -->
-    <string name="live_tv_package" translatable="false">com.mediatek.wwtv.tvcenter</string>
+    <string name="live_tv_package" translatable="false"></string>
 
     <!-- Some TVs give their Live TV app no leanback entry point at all, so `live_tv_package` above
          resolves to nothing (TCL Android TV 9 on China-market sets is one). This action is then sent
@@ -190,5 +190,24 @@
     <integer name="wii_music_volume">100</integer>
     <!-- The Games channel after the Mii channel: games from games.txt (tools/games/add.py) started in RetroArch,
          whose own tile it then hides. -->
-    <bool name="games_channel">true</bool>
+    <bool name="games_channel">false</bool>
+    <!-- The SD card button between the round ones, which opens the media player (MEDIA_PLAYER). The Google TV
+         Streamer has no such player, so it is off here. -->
+    <bool name="wii_sd_button">false</bool>
+    <!-- What the envelope button opens instead of the inputs list, when it resolves: an activity action, sent to
+         home_panel_package. This is Google TV's Home panel, the smart home controls the remote's star button opens.
+         Empty: the inputs list. -->
+    <string name="home_panel_action" translatable="false">com.google.android.libraries.tv.smarthome.intent.action.OPEN_SMART_HOME</string>
+    <string name="home_panel_package" translatable="false">com.google.android.apps.tv.dreamx</string>
+    <!-- A channel that opens the stock home screen (left enabled, see README). Choosing it hands Home to the
+         stock home until the screen next goes off; then Home and power-on come back to this menu. Empty: no
+         channel. -->
+    <string name="stock_home_component" translatable="false">com.google.android.apps.tv.launcherx/.home.HomeActivity</string>
+    <string name="stock_home_label" translatable="false">Google TV</string>
+    <!-- HomeKeyService (HOME_KEY_SERVICE=1) also takes the Home button. Needed on Google TV with the stock launcher
+         left enabled: it outranks any other home app, so Android sends Home to it whatever the default is. -->
+    <bool name="home_key_takeover">true</bool>
+    <!-- What a long press on Home opens while HomeKeyService has the button; Google TV's own home opened its side
+         panel (dashboard). Empty: nothing. -->
+    <string name="home_long_press_action" translatable="false">android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL</string>
 </resources>

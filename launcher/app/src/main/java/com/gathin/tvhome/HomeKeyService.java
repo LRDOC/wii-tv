@@ -1,9 +1,13 @@
 package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.KeyEvent;
+import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
 
 import java.util.Collections;
@@ -13,6 +17,10 @@ import java.util.Map;
  * Sends the remote's Home button to this launcher on remotes that emit KEYCODE_ALL_APPS for Home
  * (Xiaomi sticks and boxes). Android TV 9 routes that key only to the system-image launcher, so once
  * the stock launcher is disabled the button does nothing. Every other key passes through untouched.
+ *
+ * With home_key_takeover (Google TV with the stock launcher left enabled, which outranks any other home app),
+ * it takes KEYCODE_HOME as well: a press opens this launcher and a long press does what the stock one did with it,
+ * home_long_press_action. While the stock home's channel has Home (WiiMenuActivity.stockMode), Home passes through.
  *
  * Enable over adb:
  *   settings put secure enabled_accessibility_services com.gathin.tvhome/.HomeKeyService
@@ -26,6 +34,20 @@ public class HomeKeyService extends AccessibilityService {
     private boolean settingsPanel;
     /** app_keys, the same map InputKeyService reads, for setups that run only this service. */
     private Map<Integer, String> appKeys = Collections.emptyMap();
+    private boolean homeTakeover;
+    private String homeLongPress = "";
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    /** Home is down and taken; the long press already fired, so its release opens nothing. */
+    private boolean homeDown, homeLongFired;
+    private final Runnable homeLong = () -> {
+        homeLongFired = true;
+        if (homeLongPress.isEmpty()) return;
+        try {
+            startActivity(new Intent(homeLongPress).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (ActivityNotFoundException | SecurityException e) {
+            // Nothing answers it on this box: a long press is then just a press that opens nothing.
+        }
+    };
 
     @Override
     protected void onServiceConnected() {
@@ -36,6 +58,33 @@ public class HomeKeyService extends AccessibilityService {
         settingsKeycodes = config.settingsKeycodes;
         settingsPanel = config.settingsKeyPanel;
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
+        homeTakeover = getResources().getBoolean(R.bool.home_key_takeover);
+        homeLongPress = getString(R.string.home_long_press_action);
+    }
+
+    private boolean onHomeKey(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (homeDown) return true;
+            // Let Home through while the stock home has it, and for the long press that follows.
+            if (WiiMenuActivity.stockMode(this)) return false;
+            homeDown = true;
+            homeLongFired = false;
+            handler.postDelayed(homeLong, ViewConfiguration.getLongPressTimeout());
+            return true;
+        }
+        if (!homeDown) return false;
+        homeDown = false;
+        handler.removeCallbacks(homeLong);
+        if (!homeLongFired && !event.isCanceled()) openHome();
+        return true;
+    }
+
+    private void openHome() {
+        Intent home = new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .setPackage(getPackageName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        startActivity(home);
     }
 
     private boolean isSettingsKey(KeyEvent event) {
@@ -61,14 +110,9 @@ public class HomeKeyService extends AccessibilityService {
             if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) RemoteKeys.launch(this, app);
             return true;
         }
+        if (homeTakeover && event.getKeyCode() == KeyEvent.KEYCODE_HOME) return onHomeKey(event);
         if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
-        if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
-            Intent home = new Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME)
-                    .setPackage(getPackageName())
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            startActivity(home);
-        }
+        if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) openHome();
         return true;
     }
 

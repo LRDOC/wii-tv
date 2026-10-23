@@ -10,6 +10,11 @@ Shown on X: [I put the Wii interface on my TV](https://x.com/ProtoMauro/status/2
 
 Español: [README.md](README.md)
 
+> **LRDOC fork:** tuned for the Google TV Streamer, keeping Google TV's own launcher enabled so the star button,
+> Home panel, voice, casting and the Photos screensaver keep working. The envelope opens the Google Home panel,
+> a **Google TV** channel switches to Google's home until the TV next turns off, and there is no SD button or
+> Games channel. Install with `tools/install-streamer.sh`, not `launcher/build-and-install.sh`. See [AGENTS.md](AGENTS.md).
+
 ## Disclaimer
 
 wii-tv is a fan project. It is not affiliated with or endorsed by Nintendo. "Wii" is a trademark of Nintendo.

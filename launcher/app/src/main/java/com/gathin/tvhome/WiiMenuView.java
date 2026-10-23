@@ -186,6 +186,8 @@ public class WiiMenuView extends View {
     private boolean colonOn = true;
     private boolean refPose;
     private String settingsLabel = "wiiOS";
+    /** The SD card button between the round ones; off on boxes with no media player behind it. */
+    private boolean sdButton = true;
     private WiiSounds sounds;
 
     private float introAlpha;
@@ -364,6 +366,12 @@ public class WiiMenuView extends View {
     void setSettingsLabel(String label) {
         settingsLabel = label;
         rebuild();
+    }
+
+    void setSdButton(boolean on) {
+        sdButton = on;
+        if (!on && focus == BTN_SD) focus = BTN_SETTINGS;
+        invalidate();
     }
 
     /** Freezes the screen in the state of the reference capture (2:07 PM, Fri 3/22, hand on the date). */
@@ -598,16 +606,16 @@ public class WiiMenuView extends View {
                 page = next / SLOTS_PER_PAGE;
             } else if (dy > 0) {
                 int col = focus % WiiGrid.COLS;
-                focus = col == 0 ? BTN_SETTINGS : col == 1 ? BTN_SD : BTN_INPUTS;
+                focus = col == 0 ? BTN_SETTINGS : col == 1 ? (sdButton ? BTN_SD : BTN_SETTINGS) : BTN_INPUTS;
             }
         } else if (dy < 0) {
             int col = focus == BTN_SETTINGS ? 0 : focus == BTN_SD ? 1 : 3;
             focus = page * SLOTS_PER_PAGE + 8 + col;
         } else if (dx < 0) {
             if (focus == BTN_SD) focus = BTN_SETTINGS;
-            else if (focus == BTN_INPUTS) focus = BTN_SD;
+            else if (focus == BTN_INPUTS) focus = sdButton ? BTN_SD : BTN_SETTINGS;
         } else if (dx > 0) {
-            if (focus == BTN_SETTINGS) focus = BTN_SD;
+            if (focus == BTN_SETTINGS) focus = sdButton ? BTN_SD : BTN_INPUTS;
             else if (focus == BTN_SD) focus = BTN_INPUTS;
         }
         if (focus != before) {
@@ -760,6 +768,7 @@ public class WiiMenuView extends View {
                 }
             }
         }
+        if (slot == BTN_SD && !sdButton) slot = BTN_SETTINGS;
         boolean button = slot == BTN_SETTINGS || slot == BTN_SD || slot == BTN_INPUTS;
         if (!button && (slot < 0 || slot >= pages * SLOTS_PER_PAGE)) return;
         focus = slot;
@@ -1173,10 +1182,12 @@ public class WiiMenuView extends View {
         }
         if (btnLeft != null) addButton(IT_BTN_L, WiiBase.BTN_CX, BTN_SETTINGS);
         if (btnRight != null) addButton(IT_BTN_R, BTN_RIGHT_CX, BTN_INPUTS);
-        float lf = lift[liftIndex(BTN_SD)], sc = 1f + 0.08f * lf;
-        float cx = (SD_L + SD_R) / 2f * s, cy = (SD_T + SD_B) / 2f * s;
-        float hw = ((SD_R - SD_L) / 2f + 12f) * s * sc, hh = ((SD_B - SD_T) / 2f + 12f) * s * sc;
-        add(IT_SD, 0, cx - hw, cy - hh, cx + hw, cy + hh, settling(lf));
+        if (sdButton) {
+            float lf = lift[liftIndex(BTN_SD)], sc = 1f + 0.08f * lf;
+            float cx = (SD_L + SD_R) / 2f * s, cy = (SD_T + SD_B) / 2f * s;
+            float hw = ((SD_R - SD_L) / 2f + 12f) * s * sc, hh = ((SD_B - SD_T) / 2f + 12f) * s * sc;
+            add(IT_SD, 0, cx - hw, cy - hh, cx + hw, cy + hh, settling(lf));
+        }
         add(IT_DIGITS, 0, (DIGIT_X[0] - 4f) * s, (CLOCK_TOP - 4f) * s, (DIGIT_X[3] + DIGIT_W + 4f) * s,
                 (CLOCK_TOP + DIGIT_H + 4f) * s, false);
         if (colonOn) {

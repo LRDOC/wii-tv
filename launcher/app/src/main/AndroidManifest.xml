@@ -36,6 +36,11 @@
         <package android:name="com.retroarch" />
         <package android:name="com.retroarch.aarch64" />
         <package android:name="com.retroarch.ra32" />
+        <!-- Google TV: the stock home, for its channel, and the Home panel the envelope button opens. -->
+        <package android:name="com.google.android.apps.tv.launcherx" />
+        <intent>
+            <action android:name="com.google.android.libraries.tv.smarthome.intent.action.OPEN_SMART_HOME" />
+        </intent>
     </queries>
 
     <application

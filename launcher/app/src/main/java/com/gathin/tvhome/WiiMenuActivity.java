@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -47,6 +48,8 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private static final String HAND_CHANNEL = "hand_channel";
     private static final String HAND_SLOT = "hand_slot";
     private static final String HAND_PAGE = "hand_page";
+    /** In PREFS: the stock home's channel was chosen, so Home goes there until the screen next goes off. */
+    private static final String STOCK_MODE = "stock_mode";
 
     private WiiMenuView menu;
     private WiiSounds sounds;
@@ -72,7 +75,10 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         public void onReceive(Context context, Intent intent) {
             music.pause();
             fileMusic.stop();
-            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) return;
+            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                setStockMode(false);
+                return;
+            }
             if (resumed) {
                 introPending = false;
                 menu.playIntro();
@@ -113,9 +119,12 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
                 getResources().getInteger(R.integer.wii_music_volume), sounds);
         menu.setSounds(sounds);
         menu.setSettingsLabel(getString(R.string.wii_settings_label));
+        menu.setSdButton(getResources().getBoolean(R.bool.wii_sd_button));
         setContentView(menu);
         menu.requestFocus();
-        introPending = firstStartThisBoot() || getIntent().getBooleanExtra("show_intro", false);
+        boolean boot = firstStartThisBoot();
+        if (boot) setStockMode(false);
+        introPending = boot || getIntent().getBooleanExtra("show_intro", false);
         if (getIntent().getBooleanExtra(EXTRA_REF_POSE, false)) {
             introPending = false;
             menu.setRefPose(true);
@@ -140,12 +149,15 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
             registerReceiver(screenReceiver, screen);
             registerReceiver(packageReceiver, packages);
         }
+        if (stockMode() && getIntent().hasCategory(Intent.CATEGORY_HOME)) openStockHome();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         resumed = true;
+        // On its way to the stock home: no music, no welcome screen, nothing for the moment it shows.
+        if (stockMode()) return;
         if (appsDirty || miiStore.version() != miiVersion) reloadApps();
         if (handPending) {
             handPending = false;
@@ -230,6 +242,10 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (stockMode() && intent.hasCategory(Intent.CATEGORY_HOME)) {
+            openStockHome();
+            return;
+        }
         boolean refPose = intent.getBooleanExtra(EXTRA_REF_POSE, false);
         if (intent.getBooleanExtra("show_intro", false)) introPending = true;
         // Window focus, not onStart/onStop: coming back from an app, Android starts the menu again before it
@@ -310,7 +326,9 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         int at = 0;
         while (at < channels.size() && dock.contains(channels.get(at).key)) at++;
         channels.add(at, miiChannel());
-        if (games) channels.add(at + 1, gamesChannel());
+        if (games) channels.add(++at, gamesChannel());
+        WiiMenuView.Channel stock = stockChannel();
+        if (stock != null) channels.add(at + 1, stock);
         List<String> usual = new ArrayList<>(channels.size());
         for (WiiMenuView.Channel ch : channels) usual.add(ch.key);
         usualOrder = usual;
@@ -364,6 +382,54 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
                 new Intent(this, MiiChannelActivity.class));
     }
 
+    /**
+     * The stock home screen as a channel: its icon over stock_home_label, as the console drew a plain channel (Google
+     * TV's own banner is a blank blue card). Null when stock_home_component is unset or gone.
+     */
+    private WiiMenuView.Channel stockChannel() {
+        Intent intent = stockHomeIntent();
+        if (intent == null) return null;
+        PackageManager pm = getPackageManager();
+        ResolveInfo ri = pm.resolveActivity(intent, 0);
+        if (ri == null) return null;
+        return new WiiMenuView.Channel(getPackageName() + ".stock", getString(R.string.stock_home_label), null,
+                ri.loadIcon(pm), intent);
+    }
+
+    private Intent stockHomeIntent() {
+        String component = getString(R.string.stock_home_component);
+        ComponentName name = ComponentName.unflattenFromString(component);
+        if (name == null) return null;
+        return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setComponent(name)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    }
+
+    private boolean stockMode() {
+        return stockMode(this);
+    }
+
+    /** Also read by HomeKeyService, which lets Home through to the stock home while this is on. */
+    static boolean stockMode(Context context) {
+        return context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(STOCK_MODE, false);
+    }
+
+    private void setStockMode(boolean on) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(STOCK_MODE, on).apply();
+    }
+
+    /** Home pressed while the stock home has it: hand straight over, with no transition to show the menu. */
+    private void openStockHome() {
+        Intent intent = stockHomeIntent();
+        try {
+            if (intent == null) throw new ActivityNotFoundException();
+            startActivity(intent);
+            overridePendingTransition(0, 0);
+        } catch (ActivityNotFoundException | SecurityException e) {
+            // The stock home was disabled or removed: the menu takes Home back, and onResume shows it.
+            setStockMode(false);
+        }
+    }
+
     private void open(Intent intent) {
         open(intent, false);
     }
@@ -385,6 +451,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
     @Override
     public void onChannel(WiiMenuView.Channel channel) {
+        if (channel.key.equals(getPackageName() + ".stock")) setStockMode(true);
         open(channel.intent, true);
     }
 
@@ -406,6 +473,16 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
     @Override
     public void onInputsButton() {
+        // Where the box has a Home panel (Google TV's smart home controls), the envelope opens that instead.
+        String panel = getString(R.string.home_panel_action);
+        if (!panel.isEmpty()) {
+            Intent open = new Intent(panel).setPackage(getString(R.string.home_panel_package))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (open.resolveActivity(getPackageManager()) != null) {
+                open(open, true);
+                return;
+            }
+        }
         List<WiiMenuView.MenuItem> items = new ArrayList<>();
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) {
