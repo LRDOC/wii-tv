@@ -275,6 +275,26 @@ public class WiiMenuView extends View {
         }
     };
     private final Runnable autoContinue = this::dismissIntro;
+    private final Runnable hoverSound = () -> {
+        if (started && hasWindowFocus() && !refPose && !isIntroShowing() && !menuOpen
+                && !carrying && !okHeld
+                && focus >= 0 && focus < channels.size()) sound(WiiSounds.WOOP);
+    };
+
+    private void scheduleHoverSound() {
+        removeCallbacks(hoverSound);
+        int delay = getResources().getInteger(R.integer.wii_hover_delay_ms);
+        if (delay > 0 && started && !refPose && !isIntroShowing() && !menuOpen
+                && !carrying && !okHeld
+                && focus >= 0 && focus < channels.size()) postDelayed(hoverSound, delay);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) scheduleHoverSound();
+        else removeCallbacks(hoverSound);
+    }
     private final Runnable okHeldLong = this::pickUp;
 
     WiiMenuView(Context context, Listener listener) {
@@ -316,6 +336,8 @@ public class WiiMenuView extends View {
     void setChannels(List<Channel> list) {
         // An app installed or removed mid-carry: the new list wins, the carry so far is dropped unsaved.
         carrying = false;
+        okHeld = false;
+        removeCallbacks(okHeldLong);
         orderBefore = null;
         channels.clear();
         channels.addAll(list);
@@ -329,6 +351,7 @@ public class WiiMenuView extends View {
         }
         stillGen++;
         invalidate();
+        scheduleHoverSound();
     }
 
     void setIntroText(String title, String body, String cont) {
@@ -345,6 +368,7 @@ public class WiiMenuView extends View {
 
     /** Freezes the screen in the state of the reference capture (2:07 PM, Fri 3/22, hand on the date). */
     void setRefPose(boolean on) {
+        removeCallbacks(hoverSound);
         refPose = on;
         if (on) {
             colonOn = false;
@@ -368,6 +392,7 @@ public class WiiMenuView extends View {
         removeCallbacks(blink);
         if (!refPose) postDelayed(blink, 1000);
         if (introAlpha > 0f && !introLeaving) postDelayed(autoContinue, INTRO_AUTO_MS);
+        scheduleHoverSound();
         invalidate();
     }
 
@@ -375,6 +400,7 @@ public class WiiMenuView extends View {
         started = false;
         removeCallbacks(blink);
         removeCallbacks(autoContinue);
+        removeCallbacks(hoverSound);
         okHeld = false;
         removeCallbacks(okHeldLong);
         if (carrying) putDown(false);
@@ -382,6 +408,7 @@ public class WiiMenuView extends View {
 
     void playIntro() {
         if (refPose) return;
+        removeCallbacks(hoverSound);
         menuOpen = false;
         menuAlpha = 0f;
         introAlpha = 1f;
@@ -397,17 +424,18 @@ public class WiiMenuView extends View {
         if (introAlpha <= 0f || introLeaving) return;
         introLeaving = true;
         removeCallbacks(autoContinue);
-        invalidate();
         listener.onIntroDismissed();
+        scheduleHoverSound();
+        invalidate();
     }
 
-    /** True while the welcome screen is up and not yet leaving. */
-    boolean introShowing() {
+    boolean isIntroShowing() {
         return introAlpha > 0f && !introLeaving;
     }
 
     void showMenu(String title, List<MenuItem> items) {
         if (items.isEmpty()) return;
+        removeCallbacks(hoverSound);
         menuTitle = title;
         menuItems = new ArrayList<>(items);
         menuFocus = 0;
@@ -419,6 +447,7 @@ public class WiiMenuView extends View {
 
     void closeMenu() {
         menuOpen = false;
+        scheduleHoverSound();
         invalidate();
     }
 
@@ -456,6 +485,7 @@ public class WiiMenuView extends View {
         focus = 0;
         if (focus != before || page != pageBefore) {
             sound(page != pageBefore ? WiiSounds.PAGE : WiiSounds.MOVE);
+            scheduleHoverSound();
             invalidate();
         }
     }
@@ -501,7 +531,6 @@ public class WiiMenuView extends View {
             // here, and must not skip the screen it just brought up.
             if (!isOk(keyCode) && !isDpad(keyCode)) return false;
             if (!introLeaving) {
-                sound(WiiSounds.START);
                 dismissIntro();
             }
             return true;
@@ -574,6 +603,7 @@ public class WiiMenuView extends View {
         }
         if (focus != before) {
             sound(page != pageBefore ? WiiSounds.PAGE : WiiSounds.MOVE);
+            scheduleHoverSound();
             invalidate();
         }
     }
@@ -585,11 +615,14 @@ public class WiiMenuView extends View {
         page = to;
         if (focus >= 0) focus = to * SLOTS_PER_PAGE + focus % SLOTS_PER_PAGE;
         sound(WiiSounds.PAGE);
+        scheduleHoverSound();
         invalidate();
     }
 
     private void activate() {
-        sound(focus == BTN_INPUTS ? WiiSounds.MENU : WiiSounds.SELECT);
+        removeCallbacks(hoverSound);
+        boolean bigButton = focus == BTN_SETTINGS || focus == BTN_SD || focus == BTN_INPUTS;
+        sound(bigButton ? WiiSounds.BIG_BUTTON : WiiSounds.SELECT);
         if (focus == BTN_SETTINGS) listener.onSettingsButton();
         else if (focus == BTN_SD) listener.onSdButton();
         else if (focus == BTN_INPUTS) listener.onInputsButton();
@@ -601,6 +634,7 @@ public class WiiMenuView extends View {
     private void okDown(KeyEvent event) {
         long hold = ViewConfiguration.getLongPressTimeout();
         if (event.getRepeatCount() == 0) {
+            removeCallbacks(hoverSound);
             okHeld = true;
             removeCallbacks(okHeldLong);
             if (focus >= 0 && focus < channels.size()) postDelayed(okHeldLong, hold);
@@ -613,6 +647,7 @@ public class WiiMenuView extends View {
     private void pickUp() {
         removeCallbacks(okHeldLong);
         if (!okHeld || carrying || !started || focus < 0 || focus >= channels.size()) return;
+        removeCallbacks(hoverSound);
         carrying = true;
         orderBefore = channelKeys();
         sound(WiiSounds.SELECT);
@@ -677,6 +712,7 @@ public class WiiMenuView extends View {
         List<String> keys = channelKeys();
         if (!keys.equals(orderBefore)) listener.onChannelsMoved(keys);
         orderBefore = null;
+        scheduleHoverSound();
     }
 
     private List<String> channelKeys() {
@@ -722,6 +758,7 @@ public class WiiMenuView extends View {
         pagePos = page;
         handPlaced = false;
         stillGen++;
+        scheduleHoverSound();
         invalidate();
     }
 
