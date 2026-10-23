@@ -167,8 +167,6 @@ public class WiiMenuView extends View {
     private static final int[] SEGMENTS = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x27, 0x7F, 0x6F};
     /** The segment bits in the order digitSegs holds and draws them: a, d, f, b, e, c, g. */
     private static final int[] SEGMENT_ORDER = {0x01, 0x08, 0x20, 0x02, 0x10, 0x04, 0x40};
-    /** The previous version's hand was drawn in units of 1/1024 of the width. */
-    private static final float HAND_UNIT = 1920f / 1024f;
 
     private final Listener listener;
     private final List<Channel> channels = new ArrayList<>();
@@ -181,6 +179,7 @@ public class WiiMenuView extends View {
     /** Set each frame when a live tile is on screen. */
     private boolean liveShown;
     private boolean handPlaced;
+    private boolean handSprites;
     private boolean handMoving;
     private long lastFrameNanos;
     private boolean started;
@@ -230,11 +229,12 @@ public class WiiMenuView extends View {
     private final Typeface faceBold;
     private final Typeface sansBold = Typeface.create("sans-serif", Typeface.BOLD);
     private final Typeface sdFace = Typeface.create(sansBold, Typeface.BOLD_ITALIC);
+    private final WiiHand hand = new WiiHand(sansBold);
 
     private volatile int buildGen;
     private Bitmap base, btnLeft, btnRight, emptyArt;
     private BitmapShader emptyShader, baseShader, underShader;
-    private Path tilePath, handPath, handLines;
+    private Path tilePath;
     /** Everything outside a channel frame, for trimming a live tile to the frame. */
     private Path tileOutside;
     /** Outlines with their corners already rounded: the shapes a CornerPathEffect gives, worked out once. */
@@ -492,6 +492,15 @@ public class WiiMenuView extends View {
 
     void setSounds(WiiSounds sounds) {
         this.sounds = sounds;
+    }
+
+    /** The original's pointing and grabbing hands, from a Mii pack, in place of the hand drawn in code. */
+    void useHandSprites(MiiUiSprites u) {
+        if (u == null || handSprites) return;
+        handSprites = true;
+        hand.useSprites(u.bitmap("hand"), u.bitmap("hand_blur"), u.bitmap("grab"), u.bitmap("grab_blur"));
+        stillGen++;
+        invalidate();
     }
 
     private void sound(int which) {
@@ -854,7 +863,7 @@ public class WiiMenuView extends View {
         arrowShine = new LinearGradient((ARROW_L - ARROW_TIP) * s, 0f, 0f, 0f, 0x66FFFFFF, 0x00FFFFFF,
                 Shader.TileMode.CLAMP);
         digitSegs = buildDigits(new CornerPathEffect(2.5f * s));
-        buildHand();
+        hand.setScale(s);
         sdRound = rounded(buildSd(), new CornerPathEffect(4f * s));
         warnRound = buildWarning();
         menuShaders = null;
@@ -961,42 +970,6 @@ public class WiiMenuView extends View {
         p.quadTo(l + 12f * s, 0f, l, b);
         p.close();
         return p;
-    }
-
-    /**
-     * The pointing hand, fingertip at (0, 0): index finger up, three curled fingers, palm and thumb, in hand
-     * units of HAND_UNIT ref px.
-     */
-    private void buildHand() {
-        float u = HAND_UNIT * s;
-        Path p = new Path();
-        p.addRoundRect(new RectF(0f, 0f, 11f * u, 34f * u), 5.5f * u, 5.5f * u, Path.Direction.CW);
-        union(p, u, 10f, 16f, 19f, 34f, 4.5f);
-        union(p, u, 18f, 19f, 26f, 36f, 4f);
-        union(p, u, 25f, 22f, 32f, 38f, 3.5f);
-        union(p, u, -3f, 26f, 32f, 50f, 9f);
-        union(p, u, -11f, 25f, 4f, 37f, 6f);
-        Path lines = new Path();
-        lines.moveTo(10.6f * u, 23f * u);
-        lines.lineTo(10.6f * u, 31f * u);
-        lines.moveTo(18.4f * u, 25f * u);
-        lines.lineTo(18.4f * u, 33f * u);
-        lines.moveTo(25.6f * u, 28f * u);
-        lines.lineTo(25.6f * u, 35f * u);
-        lines.moveTo(3f * u, 32f * u);
-        lines.lineTo(9f * u, 34f * u);
-        Matrix m = new Matrix();
-        m.setTranslate(-5.5f * u, 0f);
-        p.transform(m);
-        lines.transform(m);
-        handPath = p;
-        handLines = lines;
-    }
-
-    private static void union(Path p, float u, float l, float t, float r, float b, float rad) {
-        Path q = new Path();
-        q.addRoundRect(new RectF(l * u, t * u, r * u, b * u), rad * u, rad * u, Path.Direction.CW);
-        p.op(q, Path.Op.UNION);
     }
 
     /** The outline a fill with these corners draws, as a plain path. */
@@ -1217,12 +1190,10 @@ public class WiiMenuView extends View {
         float half = dateTotal / 2f + 6f * s;
         add(IT_DATE, 0, WiiBase.CX * s - half, (DATE_BASE - DATE_CAP - 14f) * s, WiiBase.CX * s + half,
                 (DATE_BASE + 18f) * s, false);
-        float u = HAND_UNIT * s;
-        matrix.setRotate(-8f);
-        matrix.postTranslate(handX, handY);
-        tmp.set(-20f * u, -3f * u, 32f * u, 64f * u);
-        matrix.mapRect(tmp);
-        add(IT_HAND, 0, tmp.left - 2f, tmp.top - 2f, tmp.right + 2f, tmp.bottom + 2f, handMoving);
+        // Carrying a channel, the hand closes on it; the argument tells the still layer it changed.
+        hand.grabbing = carrying;
+        hand.bounds(handX, handY, tmp);
+        add(IT_HAND, carrying ? 1 : 0, tmp.left - 2f, tmp.top - 2f, tmp.right + 2f, tmp.bottom + 2f, handMoving);
         if (menuAlpha > 0f) add(IT_MENU, 0, 0f, 0f, w, h, true);
         if (introAlpha > 0f) add(IT_INTRO, 0, 0f, 0f, w, h, true);
     }
@@ -1357,7 +1328,7 @@ public class WiiMenuView extends View {
                 drawDate(c);
                 break;
             case IT_HAND:
-                drawHand(c);
+                hand.draw(c, handX, handY);
                 break;
             case IT_MENU:
                 drawMenu(c);
@@ -1658,36 +1629,6 @@ public class WiiMenuView extends View {
         if (!dateDay.isEmpty()) c.drawText(dateDay, x, DATE_BASE * s, text);
         c.drawText(dateRest, x + dateTotal - dateRestW, DATE_BASE * s, text);
         text.setLetterSpacing(0f);
-    }
-
-    private void drawHand(Canvas c) {
-        float u = HAND_UNIT * s;
-        int save = c.save();
-        c.translate(handX, handY);
-        c.rotate(-8f);
-        c.translate(2.5f * u, 3.5f * u);
-        fill.setColor(0x38000000);
-        c.drawPath(handPath, fill);
-        c.translate(-2.5f * u, -3.5f * u);
-        fill.setColor(0xFFFFFFFF);
-        c.drawPath(handPath, fill);
-        stroke.setColor(0xFF3A3A3A);
-        stroke.setStrokeWidth(2.2f * u);
-        c.drawPath(handPath, stroke);
-        stroke.setStrokeWidth(1.5f * u);
-        c.drawPath(handLines, stroke);
-        tmp.set(-4.5f * u, 47f * u, 23.5f * u, 60f * u);
-        fill.setColor(0xFF47B6EA);
-        c.drawRoundRect(tmp, 4f * u, 4f * u, fill);
-        stroke.setColor(0xFF2C86BA);
-        stroke.setStrokeWidth(1.6f * u);
-        c.drawRoundRect(tmp, 4f * u, 4f * u, stroke);
-        text.setTypeface(sansBold);
-        text.setTextSize(10.5f * u);
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setColor(0xFFFFFFFF);
-        c.drawText("1", tmp.centerX(), tmp.centerY() + 3.8f * u, text);
-        c.restoreToCount(save);
     }
 
     private void drawMenu(Canvas c) {

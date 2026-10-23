@@ -319,6 +319,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         Map<String, Integer> saved = Order.ranks(Order.load(orderFile()), dock);
         if (!saved.isEmpty()) Collections.sort(channels, (a, b) -> Order.compare(saved, a.key, b.key));
         menu.setChannels(channels);
+        menu.useHandSprites(MiiUiSprites.from(MiiPack.peek()));
     }
 
     private File orderFile() {
