@@ -90,7 +90,7 @@ After the notice screen closes, the jingle plays first and looping menu music st
 
 The wiiOS, SD and envelope buttons share `wii_big_buttons.ogg`. `wii_woop.ogg` plays once after the cursor stays on a channel for 500 ms. Navigation, opening a panel or leaving Home cancels the countdown. Change `wii_hover_delay_ms` in `config.xml` to adjust it; `0` disables it.
 
-Assets are in `launcher/app/src/main/res/raw/`: OGG Vorbis effects and music. See the [audio map and credits](tools/sounds/README.md). To use your own music, see [Your own music](#your-own-music).
+Assets are in `launcher/app/src/main/res/raw/`: effects and menu music in OGG Vorbis, Plaza and editor music in Opus. See the [audio map and credits](tools/sounds/README.md). To use your own music, see [Your own music](#your-own-music).
 
 ### Your own music
 

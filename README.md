@@ -168,7 +168,7 @@ Al cerrar el aviso suena el arranque, y la música del menú entra un segundo de
 
 Los botones wiiOS, SD y el sobre usan `wii_big_buttons.ogg`. `wii_woop.ogg` suena una sola vez cuando dejás la manito medio segundo sobre un canal; si antes te movés, abrís un panel o salís del menú, no suena. `wii_hover_delay_ms` en `config.xml` cambia la demora, y `0` lo apaga.
 
-Los archivos están en `launcher/app/src/main/res/raw/`: efectos y música OGG Vorbis. Mirá el [mapa de audios y créditos](tools/sounds/README.md). Para usar tu propia música, mirá [Tu propia música](#tu-propia-música).
+Los archivos están en `launcher/app/src/main/res/raw/`: los efectos y la música del menú en OGG Vorbis, y las de la Plaza y el editor en Opus. Mirá el [mapa de audios y créditos](tools/sounds/README.md). Para usar tu propia música, mirá [Tu propia música](#tu-propia-música).
 
 ### Tu propia música
 
