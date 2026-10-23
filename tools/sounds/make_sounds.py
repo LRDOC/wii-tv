@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Synthesises the channel menu's interface sounds into launcher/app/src/main/res/raw.
+"""Synthesises six interface sounds, the legacy alternative to the remakes the app ships with.
 
-These are the legacy synthetic alternatives. The app ships with contributor-made remakes.
-Output goes to tools/sounds/build so running this does not overwrite the bundled recordings.
+Output goes to tools/sounds/build, so running this never overwrites the bundled files; to use one, convert it
+and put it in launcher/app/src/main/res/raw under the same name.
 Run from the repository root:  python3 tools/sounds/make_sounds.py
-Needs numpy. Tweak the parameters below and re-run to change how the menu sounds.
+Needs numpy. Tweak the parameters below and re-run to hear other versions.
 """
 import os
 import wave
