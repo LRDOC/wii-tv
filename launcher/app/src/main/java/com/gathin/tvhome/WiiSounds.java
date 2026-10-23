@@ -4,7 +4,6 @@ import android.content.Context;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.os.SystemClock;
-import android.util.Log;
 
 /**
  * The channel menu's interface sounds (res/raw/wii_*.ogg).
@@ -48,9 +47,8 @@ final class WiiSounds {
 
     void play(int which) {
         if (!enabled || ids[which] == 0 || muted[which]) return;
-        int stream = pool.play(ids[which], VOLUME, VOLUME, 1, 0, 1f);
+        pool.play(ids[which], VOLUME, VOLUME, 1, 0, 1f);
         lastPlayed = SystemClock.uptimeMillis();
-        if (stream != 0) Log.d("WiiSounds", "played=" + which + " uptime=" + lastPlayed);
     }
 
     /** Leaves one sound out, e.g. the start sound while the menu music brings its own. */
