@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The power-on warnings (Couch 3, the house this fork is for). One is picked each time the screen comes on, never
+     the same one twice in a row; the late-night one replaces them from midnight to 5 AM. The three arrays line up:
+     title, body, prompt. Keep titles to about 30 characters so they fit on one line beside the warning sign.
+     Empty arrays bring back wii_intro_title, wii_intro_body and wii_intro_continue. -->
+<resources>
+    <string-array name="couch_warning_titles" translatable="false">
+        <item>WARNING – COUCH 3 SAFETY</item>
+        <item>WARNING – HEALTH AND SAFETY</item>
+        <item>NOTICE – COUCH 3 HOUSE RULES</item>
+        <item>WARNING – FALLING ASLEEP</item>
+        <item>WARNING – RELATIONSHIP SAFETY</item>
+        <item>WARNING – ALEX SMELLS GOOD</item>
+    </string-array>
+    <string-array name="couch_warning_bodies" translatable="false">
+        <item>BEFORE WATCHING, CONFIRM SNACKS ARE WITHIN ARM\'S REACH AND THE REMOTE HAS NOT BEEN LOST IN THE CUSHIONS.</item>
+        <item>COUCH 3 IS NOT RESPONSIBLE FOR \"JUST ONE MORE EPISODE.\" PLEASE BLINK OCCASIONALLY AND STAND UP AT LEAST ONCE PER SEASON.</item>
+        <item>SWEATPANTS RECOMMENDED. BLANKETS ARE SHARED PROPERTY. WHOEVER PAUSES FOR A BATHROOM BREAK GETS THE NEXT SNACK.</item>
+        <item>MEMBERS WHO FALL ASLEEP FORFEIT THEIR RIGHT TO COMPLAIN ABOUT WHAT THEY MISSED. NO RECAPS WILL BE PROVIDED.</item>
+        <item>CALL YOUR BOYFRIEND OR GIRLFRIEND NOW, BEFORE YOU START DOOMSCROLLING SLOP AND FORGET TO CALL THEM BACK. COUCH 3 WILL NOT COVER FOR YOU.</item>
+        <item>COUCH 3 HAS CONFIRMED THAT ALEX SMELLS GOOD. PLEASE ADJUST YOUR SEATING ACCORDINGLY.</item>
+    </string-array>
+    <string-array name="couch_warning_prompts" translatable="false">
+        <item>Press OK to sit down.</item>
+        <item>Press OK to continue.</item>
+        <item>Press OK to continue.</item>
+        <item>Press OK to stay awake.</item>
+        <item>Press OK if you already called.</item>
+        <item>Press OK to agree.</item>
+    </string-array>
+    <string name="couch_warning_late_title" translatable="false">WARNING – LATE NIGHT</string>
+    <string name="couch_warning_late_body" translatable="false">IT IS PAST MIDNIGHT. COUCH 3 RECOMMENDS GOING TO BED. COUCH 3 KNOWS YOU WON\'T.</string>
+    <string name="couch_warning_late_prompt" translatable="false">Press OK to ignore this advice.</string>
+</resources>

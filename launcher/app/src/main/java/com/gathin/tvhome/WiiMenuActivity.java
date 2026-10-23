@@ -27,6 +27,7 @@ import android.widget.Toast;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +51,8 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private static final String HAND_PAGE = "hand_page";
     /** In PREFS: the stock home's channel was chosen, so Home goes there until the screen next goes off. */
     private static final String STOCK_MODE = "stock_mode";
+    /** In PREFS: the power-on warning shown last, so the next one is a different one. */
+    private static final String LAST_WARNING = "last_warning";
     /** The menu is the screen in front; HomeKeyService then answers the star button itself (star_keycode). */
     static volatile boolean onScreen;
 
@@ -83,6 +86,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
             }
             if (resumed) {
                 introPending = false;
+                chooseWarning();
                 menu.playIntro();
                 return;
             }
@@ -111,8 +115,6 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         menu = new WiiMenuView(this, this);
-        menu.setIntroText(getString(R.string.wii_intro_title), getString(R.string.wii_intro_body),
-                getString(R.string.wii_intro_continue));
         sounds = new WiiSounds(this, getResources().getBoolean(R.bool.wii_sounds));
         music = new WiiMusic(this, getResources().getBoolean(R.bool.wii_music),
                 getResources().getInteger(R.integer.wii_music_volume));
@@ -173,6 +175,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         if (introPending) {
             introPending = false;
             music.pause();
+            chooseWarning();
             menu.playIntro();
         } else if (!menu.isIntroShowing()) {
             playMenuMusic(false);
@@ -215,6 +218,29 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     @Override
     public void onIntroDismissed() {
         if (resumed) playMenuMusic(true);
+    }
+
+    /** Puts this power-on's warning on the welcome screen: the late-night one, or a different one from last time. */
+    private void chooseWarning() {
+        String[] titles = getResources().getStringArray(R.array.couch_warning_titles);
+        String[] bodies = getResources().getStringArray(R.array.couch_warning_bodies);
+        String[] prompts = getResources().getStringArray(R.array.couch_warning_prompts);
+        int count = Math.min(titles.length, Math.min(bodies.length, prompts.length));
+        if (count == 0) {
+            menu.setIntroText(getString(R.string.wii_intro_title), getString(R.string.wii_intro_body),
+                    getString(R.string.wii_intro_continue));
+            return;
+        }
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        int i = CouchWarnings.pick(count, prefs.getInt(LAST_WARNING, -1), hour, new Random());
+        if (i == CouchWarnings.LATE) {
+            menu.setIntroText(getString(R.string.couch_warning_late_title), getString(R.string.couch_warning_late_body),
+                    getString(R.string.couch_warning_late_prompt));
+            return;
+        }
+        prefs.edit().putInt(LAST_WARNING, i).apply();
+        menu.setIntroText(titles[i], bodies[i], prompts[i]);
     }
 
     /** User-installed menu music takes precedence over the bundled track. */

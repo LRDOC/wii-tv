@@ -38,6 +38,12 @@ Colors channel (`ColorsBanner` tile) opens a swatch strip in `WiiMenuView` (`ope
 JDK 17 (`~/vendor/jdk-17`) and the SDK in `~/vendor/android-sdk` (platforms;android-34, build-tools;34.0.0); adb in
 `~/vendor/android-sdk/platform-tools`. `cd launcher && JAVA_HOME=~/vendor/jdk-17 ./gradlew assembleRelease testReleaseUnitTest lintRelease`.
 
+## Power-on warnings
+`res/values/couch_warnings.xml` (Couch 3 = the household): three aligned arrays (title, body, prompt) plus a late-night
+one. `CouchWarnings.pick` chooses at each power-on: late-night 00:00–05:00, otherwise random but never the previous one
+(`last_warning` in prefs). Titles ≈ 30 characters max. Preview without a power cycle:
+`adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME -p com.gathin.tvhome --ez show_intro true`.
+
 ## Roadmap
 - Phase 1 (done 2026-10-23): the above.
 - Phase 2 (done 2026-10-23, by Claude Code at Liam's request rather than Tel): the themes above. Design preview:
