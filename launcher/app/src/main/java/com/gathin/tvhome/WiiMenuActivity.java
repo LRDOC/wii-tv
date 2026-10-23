@@ -223,6 +223,8 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
         if (level >= TRIM_MEMORY_UI_HIDDEN) menu.trimMemory();
+        // Out of sight with the TV short of memory: the music lets go of its decoder until the menu is back.
+        if (level >= TRIM_MEMORY_BACKGROUND) music.release();
     }
 
     @Override
