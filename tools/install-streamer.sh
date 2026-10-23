@@ -23,6 +23,7 @@ printf '%s\n' "$START" | grep -qF 'Status: ok' || { printf '%s\n' "$START" >&2; 
 # Android switches accessibility services off on every reinstall, so HomeKeyService is put back each time,
 # appended to whatever other services are on.
 adb_ shell 'pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null
+appops set com.gathin.tvhome WRITE_SETTINGS allow
 cmd package compile -m speed -f com.gathin.tvhome >/dev/null
 cmd package set-home-activity --user 0 com.gathin.tvhome/.WiiMenuActivity >/dev/null
 svc=com.gathin.tvhome/.HomeKeyService

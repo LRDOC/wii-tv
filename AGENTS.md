@@ -23,7 +23,7 @@ Keys injected with `adb shell input` never reach accessibility services, so Home
 ## Fork config (`launcher/app/src/main/res/values/config.xml`)
 `games_channel` false, `wii_sd_button` false (no media player), `home_panel_action`/`home_panel_package` (envelope →
 Google Home panel, the same intent the star button sends), `stock_home_component`/`stock_home_label`,
-`home_key_takeover`, `home_long_press_action`, `star_keycode` (313 = the remote's star; HomeKeyService opens the Home
+`wii_music` (off: nobody hears it and it held the audio), `home_key_takeover`, `home_long_press_action`, `star_keycode` (313 = the remote's star; HomeKeyService opens the Home
 panel while the menu is in front, because launcherx ignores it there), `colors_channel`.
 
 ## Themes
@@ -37,6 +37,21 @@ Colors channel (`ColorsBanner` tile) opens a swatch strip in `WiiMenuView` (`ope
 ## Build
 JDK 17 (`~/vendor/jdk-17`) and the SDK in `~/vendor/android-sdk` (platforms;android-34, build-tools;34.0.0); adb in
 `~/vendor/android-sdk/platform-tools`. `cd launcher && JAVA_HOME=~/vendor/jdk-17 ./gradlew assembleRelease testReleaseUnitTest lintRelease`.
+
+## Screensaver (Google Photos, dreamx Backdrop)
+Device settings, not code (set over adb 2026-10-23): `system screen_off_timeout=300000` (5 min) and
+`global stay_on_while_plugged_in=0`. Google TV ships with stay-awake on (3) and starts Ambient from launcherx itself,
+which only happens while Google's home is in front, so it never started over the Wii menu. With stay-awake off,
+Android starts the configured screensaver after the timeout on any screen (video playback still holds the screen on).
+Undo: `settings put global stay_on_while_plugged_in 3`.
+The **Screensaver** channel can't start a dream directly (WRITE_DREAM_STATE is privileged), so it sets
+`screen_off_timeout` to Android's 10 s minimum and puts the old value back on `ACTION_DREAMING_STARTED`, the next key,
+a 30 s failsafe, or the next start (`saver_timeout` in prefs). Needs WRITE_SETTINGS via appops (install-streamer.sh),
+and only works with stay-awake off.
+
+## Night mode
+Colors strip rows: day theme, Night mode Off/On, and (On) night theme (a dark mode) + start hour 6–10 PM, until
+7 AM (`WiiTheme.isNight`). `WiiMenuActivity.applyTheme` re-checks once a minute while the menu is up.
 
 ## Power-on warnings
 `res/values/couch_warnings.xml` (Couch 3 = the household): three aligned arrays (title, body, prompt) plus a late-night

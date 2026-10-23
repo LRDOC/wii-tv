@@ -115,7 +115,16 @@
     <string name="mii_channel_name">Mii Channel</string>
     <string name="colors_channel_name">Colors</string>
     <string name="colors_banner_word">COLORS</string>
+    <string name="screensaver_channel_name">Screensaver</string>
+    <string name="screensaver_starting">The screensaver starts in a few seconds</string>
+    <string name="screensaver_no_permission">The Screensaver channel needs a permission: run tools/install-streamer.sh again</string>
     <string name="colors_hint">Arrows choose · OK keeps it · Back cancels</string>
+    <string name="colors_night_mode_label">Night mode</string>
+    <string name="colors_night_label">Night theme</string>
+    <string name="colors_start_label">Starts at</string>
+    <string name="colors_until">until %1$s</string>
+    <string name="colors_off">Off</string>
+    <string name="colors_on">On</string>
     <string name="mii_ok" translatable="false">OK</string>
     <string name="mii_edit_pick">Choose the Mii you want to edit.</string>
     <string name="mii_full">The plaza is full. Delete a Mii to make room for a new one.</string>

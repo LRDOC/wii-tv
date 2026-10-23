@@ -17,6 +17,13 @@ import java.util.List;
 final class WiiTheme {
     private static final String PREFS = "wii_theme";
     private static final String KEY = "theme";
+    private static final String NIGHT_KEY = "night";
+    private static final String NIGHT_START_KEY = "night_start";
+    private static final String NIGHT_ON_KEY = "night_on";
+    /** Hours the night theme can start at; it runs until NIGHT_END_HOUR the next morning. */
+    static final int[] NIGHT_STARTS = {18, 19, 20, 21, 22};
+    static final int NIGHT_END_HOUR = 7;
+    private static final int DEFAULT_NIGHT_START = 21;
 
     final String id;
     final String name;
@@ -107,6 +114,47 @@ final class WiiTheme {
 
     static void save(Context context, WiiTheme theme) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, theme.id).apply();
+    }
+
+    /** The dark mode picked for night, kept while night mode is off so turning it back on brings it back. */
+    static WiiTheme loadNight(Context context) {
+        WiiTheme t = byId(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(NIGHT_KEY, null));
+        return t.dark ? t : darks().get(0);
+    }
+
+    static boolean loadNightOn(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(NIGHT_ON_KEY, false);
+    }
+
+    static int loadNightStart(Context context) {
+        int h = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(NIGHT_START_KEY, DEFAULT_NIGHT_START);
+        for (int s : NIGHT_STARTS) if (s == h) return h;
+        return DEFAULT_NIGHT_START;
+    }
+
+    static void saveAll(Context context, WiiTheme day, boolean nightOn, WiiTheme night, int nightStart) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY, day.id)
+                .putBoolean(NIGHT_ON_KEY, nightOn)
+                .putString(NIGHT_KEY, night.id)
+                .putInt(NIGHT_START_KEY, nightStart)
+                .apply();
+    }
+
+    /** From nightStart in the evening until NIGHT_END_HOUR in the morning. */
+    static boolean isNight(int hour, int nightStart) {
+        return hour >= nightStart || hour < NIGHT_END_HOUR;
+    }
+
+    /** The theme to show at this hour: the night one during the night when night mode is on, else the day one. */
+    static WiiTheme effective(WiiTheme day, boolean nightOn, WiiTheme night, int nightStart, int hour) {
+        return nightOn && isNight(hour, nightStart) ? night : day;
+    }
+
+    static List<WiiTheme> darks() {
+        java.util.ArrayList<WiiTheme> out = new java.util.ArrayList<>();
+        for (WiiTheme t : ALL) if (t.dark) out.add(t);
+        return out;
     }
 
     /**

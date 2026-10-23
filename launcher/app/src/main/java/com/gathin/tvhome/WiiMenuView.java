@@ -71,8 +71,10 @@ public class WiiMenuView extends View {
         void onInputsButton();
         /** The welcome screen started to leave: the menu is coming up, as after power-on. */
         void onIntroDismissed();
-        /** OK in the Colors strip: this theme is the menu's now and should be kept. */
-        void onThemeChosen(WiiTheme theme);
+        /** OK in the Colors strip: keep this day theme, night mode on or off, its theme and its start hour. */
+        void onColorsChosen(WiiTheme day, boolean nightOn, WiiTheme night, int nightStart);
+        /** Back in the Colors strip: nothing changes, and the menu goes back to the theme it had. */
+        void onColorsCancelled();
     }
 
     static final class Channel {
@@ -196,11 +198,16 @@ public class WiiMenuView extends View {
     /** The SD card button between the round ones; off on boxes with no media player behind it. */
     private boolean sdButton = true;
     private WiiTheme theme = WiiTheme.CLASSIC;
-    /** The Colors strip: open, how far it has faded in, the focused swatch and the theme to go back to on Back. */
+    /**
+     * The Colors strip: open, how far it has faded in, and its rows: the day theme (an index into ALL), night mode
+     * off or on, and with it on, the night theme (an index into darks) and the hour it starts (into NIGHT_STARTS).
+     */
     private boolean colorsOpen;
     private float colorsAlpha;
-    private int colorsFocus;
-    private WiiTheme colorsBefore = WiiTheme.CLASSIC;
+    private int colorsRow, colorsDay, colorsNight, colorsStart;
+    private boolean colorsNightOn;
+    private static final int ROW_DAY = 0, ROW_TOGGLE = 1, ROW_NIGHT = 2, ROW_START = 3;
+    private final List<WiiTheme> darks = WiiTheme.darks();
     private final Path swatchClip = new Path();
     private WiiSounds sounds;
 
@@ -404,14 +411,31 @@ public class WiiMenuView extends View {
         return theme;
     }
 
-    private final Runnable colorsPreview = () -> setTheme(WiiTheme.ALL.get(colorsFocus));
+    boolean isColorsOpen() {
+        return colorsOpen;
+    }
 
-    /** The Colors channel: a strip of swatches over the top of the menu, which shows each one as it is focused. */
-    void openColors() {
+    /** What the menu shows behind the strip: the day theme on its row or with night mode off, else the night one. */
+    private WiiTheme colorsPreviewTheme() {
+        return colorsRow == ROW_DAY || !colorsNightOn ? WiiTheme.ALL.get(colorsDay) : darks.get(colorsNight);
+    }
+
+    private final Runnable colorsPreview = () -> setTheme(colorsPreviewTheme());
+
+    /**
+     * The Colors channel: a strip over the top of the menu with the day themes, the night theme and when night
+     * starts. The menu shows each choice as it is focused.
+     */
+    void openColors(WiiTheme day, boolean nightOn, WiiTheme night, int nightStart) {
         removeCallbacks(hoverSound);
-        colorsBefore = theme;
-        colorsFocus = Math.max(0, WiiTheme.ALL.indexOf(theme));
+        colorsRow = ROW_DAY;
+        colorsDay = Math.max(0, WiiTheme.ALL.indexOf(day));
+        colorsNightOn = nightOn;
+        colorsNight = Math.max(0, darks.indexOf(night));
+        colorsStart = 0;
+        for (int i = 0; i < WiiTheme.NIGHT_STARTS.length; i++) if (WiiTheme.NIGHT_STARTS[i] == nightStart) colorsStart = i;
         colorsOpen = true;
+        setTheme(colorsPreviewTheme());
         invalidate();
     }
 
@@ -419,30 +443,56 @@ public class WiiMenuView extends View {
         removeCallbacks(colorsPreview);
         colorsOpen = false;
         if (keep) {
-            setTheme(WiiTheme.ALL.get(colorsFocus));
-            listener.onThemeChosen(theme);
+            listener.onColorsChosen(WiiTheme.ALL.get(colorsDay), colorsNightOn, darks.get(colorsNight),
+                    WiiTheme.NIGHT_STARTS[colorsStart]);
         } else {
-            setTheme(colorsBefore);
+            listener.onColorsCancelled();
         }
         scheduleHoverSound();
         invalidate();
     }
 
+    private void colorsMoved() {
+        sound(WiiSounds.MOVE);
+        // Holding an arrow runs through several swatches; only the one it stops on is worked out.
+        removeCallbacks(colorsPreview);
+        postDelayed(colorsPreview, 160);
+        invalidate();
+    }
+
     private boolean colorsKey(int keyCode) {
         int dx = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
+        int dy = keyCode == KeyEvent.KEYCODE_DPAD_UP ? -1 : keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : 0;
         if (dx != 0) {
-            int next = colorsFocus + dx;
-            if (next >= 0 && next < WiiTheme.ALL.size()) {
-                colorsFocus = next;
-                sound(WiiSounds.MOVE);
-                // Holding an arrow runs through several swatches; only the one it stops on is worked out.
-                removeCallbacks(colorsPreview);
-                postDelayed(colorsPreview, 160);
-                invalidate();
+            if (colorsRow == ROW_DAY) {
+                int next = colorsDay + dx;
+                if (next < 0 || next >= WiiTheme.ALL.size()) return true;
+                colorsDay = next;
+            } else if (colorsRow == ROW_TOGGLE) {
+                boolean on = dx > 0;
+                if (on == colorsNightOn) return true;
+                colorsNightOn = on;
+            } else if (colorsRow == ROW_NIGHT) {
+                int next = colorsNight + dx;
+                if (next < 0 || next >= darks.size()) return true;
+                colorsNight = next;
+            } else {
+                int next = colorsStart + dx;
+                if (next < 0 || next >= WiiTheme.NIGHT_STARTS.length) return true;
+                colorsStart = next;
             }
+            colorsMoved();
             return true;
         }
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
+        if (dy != 0) {
+            // With night mode off, its theme and start rows are hidden.
+            int last = colorsNightOn ? ROW_START : ROW_TOGGLE;
+            int next = colorsRow + dy;
+            if (next < 0 || next > last) return true;
+            colorsRow = next;
+            colorsMoved();
+            return true;
+        }
         if (isOk(keyCode)) {
             sound(WiiSounds.SELECT);
             closeColors(true);
@@ -1292,14 +1342,25 @@ public class WiiMenuView extends View {
             for (int i = 0; i < itemCount; i++) drawItem(c, i);
         }
 
-        if (moving || introAlpha > 0f) postInvalidateOnAnimation();
+        if (moving) postInvalidateOnAnimation();
+        // The welcome screen only pulses its prompt, which reads the same at 20 frames a second as at 60.
+        else if (introAlpha > 0f) postInvalidateDelayed(INTRO_FRAME_MS);
         else if (liveShown) postInvalidateDelayed(LIVE_FRAME_MS);
         else lastFrameNanos = 0;
     }
 
-    /** Lets go of the still layer while the menu is hidden; the next frame records it again. */
+    private static final long INTRO_FRAME_MS = 50;
+
+    /**
+     * Lets go of the still layer and the channel pictures while the menu is hidden; the next frame records the layer
+     * again and redraws only the pictures of the page on screen.
+     */
     void trimMemory() {
         if (still != null) still.discard();
+        for (Channel ch : channels) {
+            ch.art = null;
+            ch.shader = null;
+        }
         lastSigLen = -1;
         invalidate();
     }
@@ -1363,7 +1424,7 @@ public class WiiMenuView extends View {
         hand.grabbing = carrying;
         hand.bounds(handX, handY, tmp);
         add(IT_HAND, carrying ? 1 : 0, tmp.left - 2f, tmp.top - 2f, tmp.right + 2f, tmp.bottom + 2f, handMoving);
-        if (colorsAlpha > 0f) add(IT_COLORS, 0, 0f, 0f, w, (STRIP_B + 40f) * s, true);
+        if (colorsAlpha > 0f) add(IT_COLORS, 0, 0f, 0f, w, (STRIP_B_ON + 40f) * s, true);
         if (menuAlpha > 0f) add(IT_MENU, 0, 0f, 0f, w, h, true);
         if (introAlpha > 0f) add(IT_INTRO, 0, 0f, 0f, w, h, true);
     }
@@ -1869,8 +1930,14 @@ public class WiiMenuView extends View {
     }
 
     // The Colors strip, in ref px: a panel across the top row of channels, so the rest of the menu shows the theme.
-    private static final float STRIP_L = 70f, STRIP_R = 1850f, STRIP_T = 22f, STRIP_B = 268f;
+    private static final float STRIP_L = 70f, STRIP_R = 1850f, STRIP_T = 22f;
+    /** The strip's bottom edge, with night mode's rows hidden and shown. */
+    private static final float STRIP_B_OFF = 372f, STRIP_B_ON = 560f;
     private static final float SWATCH_D = 66f, SWATCH_PITCH = 82f, SWATCH_GROUP_GAP = 30f, SWATCH_CY = 172f;
+    /** The night rows: a label at the left, then the choices from ROW_X0. */
+    private static final float TOGGLE_CY = 318f, NIGHT_CY = 410f, START_CY = 502f, ROW_X0 = 400f, NIGHT_D = 56f,
+            NIGHT_PITCH = 92f;
+    private static final float PILL_W = 132f, PILL_H = 58f, PILL_PITCH = 150f;
 
     private float swatchX(int i) {
         int n = WiiTheme.ALL.size(), light = 0;
@@ -1885,7 +1952,7 @@ public class WiiMenuView extends View {
         int save = a < 255 ? c.saveLayerAlpha(0, 0, w, h, a) : c.save();
         c.translate(0f, (colorsAlpha - 1f) * 30f * s);
         float rad = 40f * s;
-        rect.set(STRIP_L * s, STRIP_T * s, STRIP_R * s, STRIP_B * s);
+        rect.set(STRIP_L * s, STRIP_T * s, STRIP_R * s, (colorsNightOn ? STRIP_B_ON : STRIP_B_OFF) * s);
         c.save();
         c.translate(0f, 6f * s);
         fill.setColor(0x30000000);
@@ -1907,46 +1974,122 @@ public class WiiMenuView extends View {
         text.setColor(theme.label);
         c.drawText(getResources().getString(R.string.colors_hint), (STRIP_R - 44f) * s, (STRIP_T + 64f) * s, text);
 
-        float r = SWATCH_D / 2f * s;
         for (int i = 0; i < WiiTheme.ALL.size(); i++) {
-            WiiTheme t = WiiTheme.ALL.get(i);
-            float cx = swatchX(i) * s, cy = SWATCH_CY * s;
-            boolean focused = i == colorsFocus;
-            if (focused) {
-                for (int k = 3; k >= 1; k--) {
-                    stroke.setColor(withAlpha(theme.accent, 70 / k));
-                    stroke.setStrokeWidth((6f + k * 6f) * s);
-                    c.drawCircle(cx, cy, r + 4f * s, stroke);
-                }
-            }
-            swatchClip.reset();
-            swatchClip.addCircle(cx, cy, r, Path.Direction.CW);
-            int clip = c.save();
-            c.clipPath(swatchClip);
-            fill.setColor(t.bg);
-            c.drawRect(cx - r, cy - r, cx + r, cy + r, fill);
-            // The theme's accent fills the lower right half, as on the swatches in the preview.
-            swatchClip.reset();
-            swatchClip.moveTo(cx + r, cy - r);
-            swatchClip.lineTo(cx + r, cy + r);
-            swatchClip.lineTo(cx - r, cy + r);
-            swatchClip.close();
-            fill.setColor(t.accent);
-            c.drawPath(swatchClip, fill);
-            c.restoreToCount(clip);
-            stroke.setColor(focused ? theme.date : theme.frame);
-            stroke.setStrokeWidth((focused ? 6f : 3f) * s);
-            c.drawCircle(cx, cy, r, stroke);
+            drawSwatch(c, WiiTheme.ALL.get(i), swatchX(i), SWATCH_CY, SWATCH_D, i == colorsDay, colorsRow == 0);
         }
+        drawSwatchName(c, WiiTheme.ALL.get(colorsDay).name, swatchX(colorsDay), SWATCH_CY + 78f);
 
-        WiiTheme f = WiiTheme.ALL.get(colorsFocus);
+        stroke.setColor(theme.frame);
+        stroke.setStrokeWidth(2f * s);
+        c.drawLine((STRIP_L + 40f) * s, 266f * s, (STRIP_R - 40f) * s, 266f * s, stroke);
+
+        drawRowLabel(c, R.string.colors_night_mode_label, TOGGLE_CY, colorsRow == ROW_TOGGLE);
+        drawPill(c, getResources().getString(R.string.colors_off), ROW_X0, TOGGLE_CY, !colorsNightOn, colorsRow == ROW_TOGGLE);
+        drawPill(c, getResources().getString(R.string.colors_on), ROW_X0 + PILL_PITCH, TOGGLE_CY, colorsNightOn,
+                colorsRow == ROW_TOGGLE);
+        if (colorsNightOn) {
+            drawRowLabel(c, R.string.colors_night_label, NIGHT_CY, colorsRow == ROW_NIGHT);
+            for (int i = 0; i < darks.size(); i++) {
+                drawSwatch(c, darks.get(i), nightX(i), NIGHT_CY, NIGHT_D, colorsNight == i, colorsRow == ROW_NIGHT);
+            }
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(28f * s);
+            text.setColor(theme.date);
+            c.drawText(darks.get(colorsNight).name, (nightX(darks.size() - 1) + NIGHT_D / 2f + 30f) * s,
+                    (NIGHT_CY + 10f) * s, text);
+
+            drawRowLabel(c, R.string.colors_start_label, START_CY, colorsRow == ROW_START);
+            for (int i = 0; i < WiiTheme.NIGHT_STARTS.length; i++) {
+                drawPill(c, hourLabel(WiiTheme.NIGHT_STARTS[i]), ROW_X0 + i * PILL_PITCH, START_CY, colorsStart == i,
+                        colorsRow == ROW_START);
+            }
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(28f * s);
+            text.setColor(theme.label);
+            c.drawText(getResources().getString(R.string.colors_until, hourLabel(WiiTheme.NIGHT_END_HOUR)),
+                    (ROW_X0 - PILL_W / 2f + WiiTheme.NIGHT_STARTS.length * PILL_PITCH + 20f) * s, (START_CY + 10f) * s, text);
+        }
+        c.restoreToCount(save);
+    }
+
+    private String hourLabel(int hour) {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.HOUR_OF_DAY, hour);
+        cal.set(Calendar.MINUTE, 0);
+        return android.text.format.DateFormat.getTimeFormat(getContext()).format(cal.getTime());
+    }
+
+    private float nightX(int i) {
+        return ROW_X0 - PILL_W / 2f + NIGHT_D / 2f + i * NIGHT_PITCH;
+    }
+
+    private void drawRowLabel(Canvas c, int label, float cy, boolean focusedRow) {
+        text.setTypeface(sansBold);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(30f * s);
+        text.setColor(focusedRow ? theme.date : theme.label);
+        c.drawText(getResources().getString(label), (STRIP_L + 44f) * s, (cy + 11f) * s, text);
+    }
+
+    /** One theme as a circle: its background with its accent across the lower right half. */
+    private void drawSwatch(Canvas c, WiiTheme t, float cxRef, float cyRef, float dRef, boolean selected, boolean rowFocused) {
+        float cx = cxRef * s, cy = cyRef * s, r = dRef / 2f * s;
+        if (selected && rowFocused) {
+            for (int k = 3; k >= 1; k--) {
+                stroke.setColor(withAlpha(theme.accent, 70 / k));
+                stroke.setStrokeWidth((6f + k * 6f) * s);
+                c.drawCircle(cx, cy, r + 4f * s, stroke);
+            }
+        }
+        swatchClip.reset();
+        swatchClip.addCircle(cx, cy, r, Path.Direction.CW);
+        int clip = c.save();
+        c.clipPath(swatchClip);
+        fill.setColor(t.bg);
+        c.drawRect(cx - r, cy - r, cx + r, cy + r, fill);
+        swatchClip.reset();
+        swatchClip.moveTo(cx + r, cy - r);
+        swatchClip.lineTo(cx + r, cy + r);
+        swatchClip.lineTo(cx - r, cy + r);
+        swatchClip.close();
+        fill.setColor(t.accent);
+        c.drawPath(swatchClip, fill);
+        c.restoreToCount(clip);
+        stroke.setColor(selected ? theme.date : theme.frame);
+        stroke.setStrokeWidth((selected ? 6f : 3f) * s);
+        c.drawCircle(cx, cy, r, stroke);
+    }
+
+    private void drawSwatchName(Canvas c, String name, float cxRef, float baseRef) {
         text.setTextAlign(Paint.Align.CENTER);
         text.setTextSize(28f * s);
         text.setColor(theme.date);
-        float half = text.measureText(f.name) / 2f;
-        float nx = Math.max((STRIP_L + 30f) * s + half, Math.min((STRIP_R - 30f) * s - half, swatchX(colorsFocus) * s));
-        c.drawText(f.name, nx, (SWATCH_CY + 78f) * s, text);
-        c.restoreToCount(save);
+        float half = text.measureText(name) / 2f;
+        float nx = Math.max((STRIP_L + 30f) * s + half, Math.min((STRIP_R - 30f) * s - half, cxRef * s));
+        c.drawText(name, nx, baseRef * s, text);
+    }
+
+    /** A rounded choice with a word in it (Off, the start hours); cxRef is its centre. */
+    private void drawPill(Canvas c, String label, float cxRef, float cyRef, boolean selected, boolean rowFocused) {
+        float cx = cxRef * s, cy = cyRef * s, hw = PILL_W / 2f * s, hh = PILL_H / 2f * s;
+        tmp.set(cx - hw, cy - hh, cx + hw, cy + hh);
+        if (selected && rowFocused) {
+            for (int k = 3; k >= 1; k--) {
+                stroke.setColor(withAlpha(theme.accent, 70 / k));
+                stroke.setStrokeWidth((6f + k * 6f) * s);
+                c.drawRoundRect(tmp, hh, hh, stroke);
+            }
+        }
+        fill.setColor(selected ? theme.accent : theme.plainBottom);
+        c.drawRoundRect(tmp, hh, hh, fill);
+        stroke.setColor(selected ? theme.date : theme.frame);
+        stroke.setStrokeWidth((selected ? 4f : 2.5f) * s);
+        c.drawRoundRect(tmp, hh, hh, stroke);
+        text.setTypeface(sansBold);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(27f * s);
+        text.setColor(selected ? theme.onAccent : theme.label);
+        c.drawText(label, cx, cy + 10f * s, text);
     }
 
     private void drawIntro(Canvas c) {

@@ -44,6 +44,25 @@ public class WiiThemeTest {
     }
 
     @Test
+    public void nightRunsFromStartUntilSevenAm() {
+        assertTrue(WiiTheme.isNight(21, 21));
+        assertTrue(WiiTheme.isNight(23, 21));
+        assertTrue(WiiTheme.isNight(0, 21));
+        assertTrue(WiiTheme.isNight(6, 21));
+        assertTrue(!WiiTheme.isNight(7, 21));
+        assertTrue(!WiiTheme.isNight(20, 21));
+        assertTrue(WiiTheme.isNight(18, 18));
+    }
+
+    @Test
+    public void effectiveFollowsTheToggle() {
+        WiiTheme day = WiiTheme.byId("blush"), night = WiiTheme.byId("plum");
+        assertSame(day, WiiTheme.effective(day, false, night, 21, 23));
+        assertSame(night, WiiTheme.effective(day, true, night, 21, 23));
+        assertSame(day, WiiTheme.effective(day, true, night, 21, 12));
+    }
+
+    @Test
     public void mapPinsBothEnds() {
         assertEquals(0xFF102030, WiiTheme.map(10f, 10f, 0xFF102030, 20f, 0xFF203040));
         assertEquals(0xFF203040, WiiTheme.map(20f, 10f, 0xFF102030, 20f, 0xFF203040));

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Screensaver channel's picture: a framed landscape photo (sky, sun, two hills). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <path android:fillColor="#FFFFFF" android:pathData="M10,18h76a6,6 0,0 1,6 6v48a6,6 0,0 1,-6 6H10a6,6 0,0 1,-6 -6V24a6,6 0,0 1,6 -6z" />
+    <path android:fillColor="#8FD3F7" android:pathData="M12,24h72a2,2 0,0 1,2 2v44a2,2 0,0 1,-2 2H12a2,2 0,0 1,-2 -2V26a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#FBC02D" android:pathData="M68,40m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0" />
+    <path android:fillColor="#4CAF50" android:pathData="M10,62L30,42L50,62L50,70a2,2 0,0 1,-2 2H12a2,2 0,0 1,-2 -2z" />
+    <path android:fillColor="#2E7D32" android:pathData="M34,72L58,48L86,72L86,70a2,2 0,0 1,-2 2z" />
+    <path android:strokeColor="#9E9E9E" android:strokeWidth="2" android:fillColor="#00000000"
+        android:pathData="M10,18h76a6,6 0,0 1,6 6v48a6,6 0,0 1,-6 6H10a6,6 0,0 1,-6 -6V24a6,6 0,0 1,6 -6z" />
+</vector>

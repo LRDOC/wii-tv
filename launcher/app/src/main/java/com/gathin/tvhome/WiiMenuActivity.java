@@ -53,6 +53,10 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private static final String STOCK_MODE = "stock_mode";
     /** In PREFS: the power-on warning shown last, so the next one is a different one. */
     private static final String LAST_WARNING = "last_warning";
+    /** In PREFS: the screen timeout the Screensaver channel shortened, to put back; absent when nothing is pending. */
+    private static final String SAVER_TIMEOUT = "saver_timeout";
+    /** Android won't go below this; the screensaver starts this long after the channel is chosen. */
+    private static final int SAVER_SHORT_TIMEOUT_MS = 10_000;
     /** The menu is the screen in front; HomeKeyService then answers the star button itself (star_keycode). */
     static volatile boolean onScreen;
 
@@ -78,6 +82,10 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_DREAMING_STARTED.equals(intent.getAction())) {
+                restoreScreenTimeout();
+                return;
+            }
             music.pause();
             fileMusic.stop();
             if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
@@ -124,9 +132,11 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         menu.setSounds(sounds);
         menu.setSettingsLabel(getString(R.string.wii_settings_label));
         menu.setSdButton(getResources().getBoolean(R.bool.wii_sd_button));
-        menu.setTheme(WiiTheme.load(this));
+        applyTheme();
         setContentView(menu);
         menu.requestFocus();
+        // A shortened timeout left behind (the process died before the screensaver started) goes back first.
+        restoreScreenTimeout();
         boolean boot = firstStartThisBoot();
         if (boot) setStockMode(false);
         introPending = boot || getIntent().getBooleanExtra("show_intro", false);
@@ -142,6 +152,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
         IntentFilter screen = new IntentFilter(Intent.ACTION_SCREEN_ON);
         screen.addAction(Intent.ACTION_SCREEN_OFF);
+        screen.addAction(Intent.ACTION_DREAMING_STARTED);
         IntentFilter packages = new IntentFilter();
         packages.addAction(Intent.ACTION_PACKAGE_ADDED);
         packages.addAction(Intent.ACTION_PACKAGE_REMOVED);
@@ -164,6 +175,9 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         onScreen = true;
         // On its way to the stock home: no music, no welcome screen, nothing for the moment it shows.
         if (stockMode()) return;
+        applyTheme();
+        menu.removeCallbacks(themeClock);
+        menu.postDelayed(themeClock, 60_000L);
         if (appsDirty || miiStore.version() != miiVersion) reloadApps();
         if (handPending) {
             handPending = false;
@@ -187,6 +201,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         super.onPause();
         resumed = false;
         onScreen = false;
+        menu.removeCallbacks(themeClock);
         music.pause();
         fileMusic.stop();
         menu.stop();
@@ -291,6 +306,7 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        restoreScreenTimeout();
         if (menu.handleKey(event)) return true;
         return super.onKeyDown(keyCode, event);
     }
@@ -361,9 +377,13 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
         WiiMenuView.Channel stock = stockChannel();
         if (stock != null) channels.add(++at, stock);
         if (getResources().getBoolean(R.bool.colors_channel)) {
-            channels.add(at + 1, new WiiMenuView.Channel(getPackageName() + ".colors",
+            channels.add(++at, new WiiMenuView.Channel(getPackageName() + ".colors",
                     getString(R.string.colors_channel_name), new ColorsBanner(getString(R.string.colors_banner_word)),
                     null, null));
+        }
+        if (getResources().getBoolean(R.bool.screensaver_channel)) {
+            channels.add(at + 1, new WiiMenuView.Channel(getPackageName() + ".screensaver",
+                    getString(R.string.screensaver_channel_name), null, getDrawable(R.drawable.ic_screensaver), null));
         }
         List<String> usual = new ArrayList<>(channels.size());
         for (WiiMenuView.Channel ch : channels) usual.add(ch.key);
@@ -488,7 +508,12 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     @Override
     public void onChannel(WiiMenuView.Channel channel) {
         if (channel.key.equals(getPackageName() + ".colors")) {
-            menu.openColors();
+            menu.openColors(WiiTheme.load(this), WiiTheme.loadNightOn(this), WiiTheme.loadNight(this),
+                    WiiTheme.loadNightStart(this));
+            return;
+        }
+        if (channel.key.equals(getPackageName() + ".screensaver")) {
+            startScreensaver();
             return;
         }
         if (channel.key.equals(getPackageName() + ".stock")) setStockMode(true);
@@ -496,9 +521,72 @@ public class WiiMenuActivity extends Activity implements WiiMenuView.Listener {
     }
 
     @Override
-    public void onThemeChosen(WiiTheme theme) {
-        WiiTheme.save(this, theme);
+    public void onColorsChosen(WiiTheme day, boolean nightOn, WiiTheme night, int nightStart) {
+        WiiTheme.saveAll(this, day, nightOn, night, nightStart);
+        applyTheme();
     }
+
+    @Override
+    public void onColorsCancelled() {
+        applyTheme();
+    }
+
+    private final Runnable saverFailsafe = this::restoreScreenTimeout;
+
+    /**
+     * Apps can't start the screensaver themselves, but Android starts it when the screen timeout runs out. So the
+     * timeout drops to its minimum and goes back as soon as the screensaver starts, a key is pressed, or after 30 s.
+     */
+    private void startScreensaver() {
+        if (!Settings.System.canWrite(this)) {
+            Toast.makeText(this, R.string.screensaver_no_permission, Toast.LENGTH_LONG).show();
+            return;
+        }
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        try {
+            if (!prefs.contains(SAVER_TIMEOUT)) {
+                int now = Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT, 300_000);
+                prefs.edit().putInt(SAVER_TIMEOUT, now).commit();
+            }
+            Settings.System.putInt(getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT, SAVER_SHORT_TIMEOUT_MS);
+        } catch (SecurityException e) {
+            Toast.makeText(this, R.string.screensaver_no_permission, Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, R.string.screensaver_starting, Toast.LENGTH_SHORT).show();
+        menu.removeCallbacks(saverFailsafe);
+        menu.postDelayed(saverFailsafe, 30_000L);
+    }
+
+    /** Puts back the timeout the Screensaver channel shortened, if it did; safe to call any time. */
+    private void restoreScreenTimeout() {
+        menu.removeCallbacks(saverFailsafe);
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (!prefs.contains(SAVER_TIMEOUT)) return;
+        try {
+            Settings.System.putInt(getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT,
+                    prefs.getInt(SAVER_TIMEOUT, 300_000));
+        } catch (SecurityException e) {
+            // Permission taken away since; nothing more can be done from here.
+        }
+        prefs.edit().remove(SAVER_TIMEOUT).apply();
+    }
+
+    /** The saved day theme, or the night one at night when night mode is on. */
+    private void applyTheme() {
+        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        menu.setTheme(WiiTheme.effective(WiiTheme.load(this), WiiTheme.loadNightOn(this), WiiTheme.loadNight(this),
+                WiiTheme.loadNightStart(this), hour));
+    }
+
+    // Night mode starts and ends on the hour while the menu is up; checked once a minute.
+    private final Runnable themeClock = new Runnable() {
+        @Override
+        public void run() {
+            if (!menu.isColorsOpen()) applyTheme();
+            menu.postDelayed(this, 60_000L);
+        }
+    };
 
     @Override
     public void onSettingsButton() {

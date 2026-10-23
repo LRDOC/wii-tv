@@ -185,7 +185,9 @@
     <integer name="wii_hover_delay_ms">500</integer>
     <!-- Music in the menu, the Mii Plaza and the editor. Files installed with tools/music/add.py replace the
          menu's. -->
-    <bool name="wii_music">true</bool>
+    <!-- Off on the Streamer: the household doesn't hear it, and a playing track holds the audio, which can keep Google
+         TV's screensaver from starting over the menu. -->
+    <bool name="wii_music">false</bool>
     <!-- Music level in percent: 0 to 100 for bundled music; external WAVs allow up to 200. -->
     <integer name="wii_music_volume">100</integer>
     <!-- The Games channel after the Mii channel: games from games.txt (tools/games/add.py) started in RetroArch,
@@ -207,6 +209,9 @@
     <!-- The Colors channel after Google TV: 15 light themes and 5 dark modes for this menu (WiiTheme), kept across
          power-off. -->
     <bool name="colors_channel">true</bool>
+    <!-- The Screensaver channel after Colors: starts the TV's own screensaver (Google Photos here) a few seconds later,
+         by setting the screen timeout to its minimum until the screensaver starts. Needs WRITE_SETTINGS (adb). -->
+    <bool name="screensaver_channel">true</bool>
     <!-- HomeKeyService (HOME_KEY_SERVICE=1) also takes the Home button. Needed on Google TV with the stock launcher
          left enabled: it outranks any other home app, so Android sends Home to it whatever the default is. -->
     <bool name="home_key_takeover">true</bool>
