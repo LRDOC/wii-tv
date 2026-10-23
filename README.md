@@ -146,7 +146,7 @@ El canal Juegos arranca tus juegos en RetroArch. Usá solo juegos tuyos: copiá 
    ```sh
    TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py --setup
    ```
-   Agrega el mapa de botones de `tools/games/retroarch/` y cambia algunos ajustes de RetroArch: OK elige y Atrás vuelve, mantener el botón rojo abre su menú y el juego se guarda cada 10 segundos. Antes guarda una copia de los ajustes en `retroarch.cfg.before-wii-tv`, en la carpeta de RetroArch de la TV. Si usás un joystick Bluetooth, en RetroArch elegí además Actualizador en línea → Actualizar perfiles de controles.
+   Agrega el mapa de botones de `tools/games/retroarch/` y cambia algunos ajustes de RetroArch: OK elige y Atrás vuelve, mantener el botón rojo abre su menú y el juego se guarda cada 10 segundos. Antes guarda una copia de los ajustes en `retroarch.cfg.before-wii-tv`, en la carpeta de RetroArch de la TV. Si usás un joystick Bluetooth, en RetroArch elegí además Actualizador en línea → Actualizar perfiles de controles. Si ya lo habías preparado con una versión anterior de wii-tv, corrélo otra vez: cambió el mapa de botones.
 3. **Sumá tus juegos**:
    ```sh
    TV_HOST=192.168.1.50 tools/venv/bin/python tools/games/add.py "Mi juego.gba" --title "Mi juego"
