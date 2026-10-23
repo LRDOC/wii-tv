@@ -90,7 +90,17 @@ After the notice screen closes, the jingle plays first and looping menu music st
 
 The wiiOS, SD and envelope buttons share `wii_big_buttons.ogg`. `wii_woop.ogg` plays once after the cursor stays on a channel for 500 ms. Navigation, opening a panel or leaving Home cancels the countdown. Change `wii_hover_delay_ms` in `config.xml` to adjust it; `0` disables it.
 
-Assets are in `launcher/app/src/main/res/raw/`: OGG Vorbis effects and music. See the [audio map and credits](tools/sounds/README.md). Existing custom menu music installed with the optional `tools/music/add.py` tool takes precedence; removing it restores the bundled track.
+Assets are in `launcher/app/src/main/res/raw/`: OGG Vorbis effects and music. See the [audio map and credits](tools/sounds/README.md). To use your own music, see [Your own music](#your-own-music).
+
+### Your own music
+
+The menu can play your own music instead of the bundled track. Add it with `tools/music/add.py`, which needs [ffmpeg](https://ffmpeg.org) on your computer:
+
+```sh
+TV_HOST=192.168.1.50 tools/venv/bin/python tools/music/add.py music.flac --start jingle.flac --loop 12.5 48
+```
+
+`--loop START END` is in seconds: the music plays to END and carries on from START, over and over. The second and a half before END fades into what plays just before START, so the jump is not heard (`--crossfade` sets how long). Without `--loop` the whole file repeats. `--start` is optional: a jingle that takes the place of the menu's own start sound; the music comes in a second later, as with the bundled track. It reads what ffmpeg reads (mp3, flac, ogg, m4a, wav) and stores it on the TV as WAV, in wiiOS's folder; with `adb` installed (or `ADB=/path/to/adb`) the copy takes a second. `--remove` takes your music off and brings the bundled track back, and `--out folder` only writes the files.
 
 ## Customise
 
